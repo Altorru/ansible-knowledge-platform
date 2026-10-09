@@ -154,6 +154,15 @@ Le playbook n'altère ni le pare-feu ni la configuration SSH. Forgejo écoute en
 
 Le Nginx installé par Ansible sert la documentation et transmet les requêtes Git à Forgejo, qui écoute uniquement sur `127.0.0.1:3000`. Avec un reverse proxy extérieur, le trajet Git est donc : proxy extérieur → HTTPS sur le port 8443 du VPS → Nginx de la plateforme → Forgejo en HTTP local.
 
+Quand le proxy est dans un autre conteneur Proxmox, utiliser l'adresse réseau du VPS hébergeant la plateforme, pas `127.0.0.1` (qui désigne le conteneur du proxy).
+
+| Domaine sur le proxy extérieur | Scheme vers la plateforme | Port cible |
+| --- | --- | --- |
+| Domaine Forgejo | `https` | `8443` |
+| Domaine documentation | `https` | `443` |
+
+Le port 80 sert uniquement aux redirections HTTPS et aux challenges Let's Encrypt ; il ne sert pas directement Forgejo ou les documents. Le site Debian `Welcome to nginx` est désactivé par Ansible. Si cette page reste visible, réappliquer le déploiement et vérifier que le proxy pointe vers la bonne machine.
+
 Dans le proxy extérieur, utiliser **HTTPS** vers le port 8443 :
 
 ```nginx
