@@ -25,17 +25,18 @@ all:
         knowledge_01:
           ansible_host: 203.0.113.10       # Adresse réelle du VPS
           ansible_user: root             # Ou votre utilisateur sudo
+          ansible_port: 22               # Port SSH du VPS
           platform_email: vous@entreprise.fr
 ```
 
-Le port SSH est 22 par défaut. Ajouter `ansible_port` seulement si l'hébergeur utilise un autre port. Le mot de passe SSH sera demandé au lancement ; l'inventory réel est ignoré par Git.
+Renseigner `ansible_port` avec le port SSH fourni par l'hébergeur (22 par défaut). Le mot de passe SSH sera demandé au lancement ; l'inventory réel est ignoré par Git.
 
 ### 2. Se connecter une première fois
 
-Remplacer l'adresse par celle du VPS et adapter l'utilisateur si nécessaire :
+Adapter l'adresse, l'utilisateur et le port (`-p`) aux valeurs de l'inventory :
 
 ```sh
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive root@203.0.113.10
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -p 22 root@203.0.113.10
 ```
 
 Vérifier l'empreinte du serveur auprès de l'hébergeur avant de l'accepter. Saisir le mot de passe SSH, puis `exit` pour revenir sur votre poste. Aucune clé d'authentification SSH n'est nécessaire.
