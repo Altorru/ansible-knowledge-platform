@@ -2,34 +2,113 @@
 
 Forgejo + MkDocs Material + Nginx, installés sur un VPS Debian par Ansible. Les sources sont clonables, la documentation est publiée en HTML et les mises à jour sont autonomes. Aucun runner CI, abonnement, Docker ou clé SSH nécessaire sur le VPS.
 
-## Démarrage
+## Quickstart — SSH par mot de passe
 
-Prérequis : Debian 12 ou 13, architecture amd64 ou arm64, accès SSH par mot de passe et droits sudo, deux domaines pointant sur le VPS. Les ports TCP 80 et 443 doivent être accessibles pour Let's Encrypt. Prévoir un serveur dédié à cette plateforme pour éviter les conflits avec d'autres services web.
+Prévoir un VPS **Debian 12 ou 13** (amd64 ou arm64), un utilisateur SSH avec droits sudo ou `root`, et deux domaines pointant vers le VPS. Les ports TCP 80 et 443 doivent être ouverts pour HTTPS et Let's Encrypt. Utiliser un VPS dédié pour éviter les conflits avec d'autres services web.
 
-Sur le Mac, Ansible Core 2.19+ est nécessaire ; la version 2.21.5 installée convient. Ouvrir un terminal dans ce dépôt, copier l'inventory et renseigner les fichiers :
+### 1. Ouvrir le dépôt
 
-```sh
-cp inventory/hosts.example.yml inventory/hosts.yml
-```
-
-- `inventory/hosts.yml` : adresse, utilisateur et port SSH.
-- `inventory/group_vars/knowledge/main.yml` : domaines Git et documentation, emails et nom du dépôt.
-
-Les valeurs `.invalid` sont volontairement refusées avant installation. Vérifier l'empreinte SSH de la cible auprès de l'hébergeur puis effectuer une première connexion avec mot de passe pour l'enregistrer :
+Sur le Mac, Ansible Core **2.19 minimum** doit être installé. Depuis le dépôt local :
 
 ```sh
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -p 22 deploy@ADRESSE_DU_VPS
+cd ~/Documents/ansible-knowledge-platform
+ansible-playbook --version
 ```
 
-Ensuite, une seule commande déploie toute la plateforme :
+Pour récupérer le dépôt sur un autre poste :
+
+```sh
+git clone https://github.com/Altorru/ansible-knowledge-platform.git
+cd ansible-knowledge-platform
+```
+
+Le dépôt GitHub est privé : le compte utilisé doit y avoir accès.
+
+### 2. Renseigner le VPS et les domaines
+
+Créer l'inventory sans écraser un fichier déjà renseigné :
+
+```sh
+cp -n inventory/hosts.example.yml inventory/hosts.yml
+```
+
+Dans `inventory/hosts.yml`, remplacer l'adresse, l'utilisateur et le port par ceux du VPS :
+
+```yaml
+all:
+  children:
+    knowledge:
+      hosts:
+        knowledge_01:
+          ansible_host: vps.example.com
+          ansible_user: deploy
+          ansible_port: 22
+```
+
+Utiliser `ansible_user: root` si le compte fourni par l'hébergeur est root. **Ne pas écrire le mot de passe dans l'inventory** : il sera demandé dans le terminal. L'inventory réel est ignoré par Git.
+
+Dans `inventory/group_vars/knowledge/main.yml`, remplacer au minimum ces valeurs :
+
+```yaml
+git_domain: git.example.com
+docs_domain: docs.example.com
+certificate_email: admin@example.com
+forgejo_admin_email: admin@example.com
+```
+
+Ces exemples sont à remplacer par vos propres domaines et emails. Faire pointer les deux noms DNS vers le VPS et garder `tls_mode: letsencrypt`. Les valeurs `.invalid` du modèle sont refusées par le playbook.
+
+### 3. Vérifier la connexion SSH
+
+Remplacer l'adresse, l'utilisateur et le port dans cette commande :
+
+```sh
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -p 22 deploy@vps.example.com
+```
+
+À la première connexion, comparer l'empreinte du serveur avec celle fournie par l'hébergeur avant de l'accepter. Saisir le mot de passe SSH, puis taper `exit` pour revenir sur le Mac. Cela enregistre l'identité du serveur ; aucune clé d'authentification SSH n'est créée.
+
+### 4. Déployer en une commande
+
+Avec un utilisateur qui utilise sudo :
 
 ```sh
 ansible-playbook -i inventory/hosts.yml deploy.yml -k -K
 ```
 
-Ansible demande le mot de passe SSH, le mot de passe sudo, le mot de passe initial Forgejo et le mot de passe partagé du site documentaire. Les mots de passe applicatifs doivent comporter au moins 16 caractères. Omettre `-K` pour root ou sudo sans mot de passe. Les connexions Ansible n'utilisent aucune clé SSH.
+Avec `ansible_user: root` :
 
-Le déploiement met aussi à jour les paquets Debian sans suppression de paquets, migration majeure ou redémarrage automatique. Mettre `platform_upgrade_packages: false` dans l’inventory pour réserver les mises à jour au playbook de maintenance.
+```sh
+ansible-playbook -i inventory/hosts.yml deploy.yml -k -e ansible_become=false
+```
+
+Ansible demande les mots de passe dans le terminal, sans les afficher :
+
+| Demande | Mot de passe à saisir |
+| --- | --- |
+| `SSH password` (`-k`) | Mot de passe SSH du VPS |
+| `BECOME password` (`-K`) | Mot de passe sudo ; souvent le même que SSH |
+| Mot de passe initial Forgejo | Choisir au moins 16 caractères pour le compte `docsadmin` |
+| Mot de passe de consultation du site | Choisir au moins 16 caractères pour l'utilisateur `docs` |
+
+Pour un utilisateur avec sudo sans mot de passe, omettre simplement `-K`. Les connexions Ansible sont configurées pour utiliser le mot de passe SSH. Aucun Vault n'est nécessaire pour ce quickstart.
+
+Le déploiement installe la plateforme et met à jour les paquets Debian, sans migration majeure ni redémarrage automatique. Pour réserver les mises à jour au playbook de maintenance, mettre `platform_upgrade_packages: false` dans `inventory/group_vars/knowledge/main.yml`.
+
+### 5. Ouvrir et vérifier la plateforme
+
+- Ouvrir `https://git.example.com` : compte `docsadmin` et mot de passe Forgejo choisi.
+- Ouvrir `https://docs.example.com` : utilisateur `docs` et mot de passe de consultation choisi.
+
+Remplacer les domaines par ceux renseignés à l'étape 2. Vérifier les services depuis le Mac :
+
+```sh
+ansible-playbook -i inventory/hosts.yml verify.yml -k -K
+```
+
+Avec root, remplacer `-K` par `-e ansible_become=false`, comme pour le déploiement. La vérification demande aussi le mot de passe de consultation.
+
+Pour réappliquer la configuration, relancer la commande de déploiement avec les mots de passe applicatifs actuels. Les documents existants sont conservés. Pour publier votre première page, suivre [Modifier les documents](#modifier-les-documents).
 
 ## Résultat
 
@@ -154,9 +233,11 @@ Ne pas extraire aveuglément une archive sur un serveur existant. Restic permet 
 ## Maintenance et contrôles
 
 ```sh
-ansible-playbook verify.yml -k -K --ask-vault-pass
+ansible-playbook verify.yml -k -K
 ansible-playbook maintenance.yml -k -K
 ```
+
+Si vous avez créé un fichier Vault, ajouter `--ask-vault-pass` à ces commandes. Avec root, remplacer `-K` par `-e ansible_become=false`.
 
 `verify.yml` utilise `vault_docs_password` ou demande le mot de passe de consultation, et vérifie les services et le site depuis le VPS. Pour vérifier aussi l'accès externe et la validité du certificat, ouvrir les deux domaines depuis un poste utilisateur.
 
