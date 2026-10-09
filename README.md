@@ -2,37 +2,20 @@
 
 Forgejo + MkDocs Material + Nginx, installés sur un VPS Debian par Ansible. Les sources sont clonables, la documentation est publiée en HTML et les mises à jour sont autonomes. Aucun runner CI, abonnement, Docker ou clé SSH nécessaire sur le VPS.
 
-## Quickstart — SSH par mot de passe
+## Quickstart
 
-Prévoir un VPS **Debian 12 ou 13** (amd64 ou arm64), un utilisateur SSH avec droits sudo ou `root`, et deux domaines pointant vers le VPS. Les ports TCP 80 et 443 doivent être ouverts pour HTTPS et Let's Encrypt. Utiliser un VPS dédié pour éviter les conflits avec d'autres services web.
+Un VPS **Debian 12 ou 13**, son adresse SSH et un email suffisent. Ansible crée les comptes, le dépôt documentaire, HTTPS, la publication automatique et les sauvegardes locales. Prévoir un VPS dédié et ouvrir les ports **443 et 8443** auprès de l'hébergeur.
 
-### 1. Ouvrir le dépôt
+### 1. Préparer l'inventory
 
-Sur le Mac, Ansible Core **2.19 minimum** doit être installé. Depuis le dépôt local :
+Ansible Core 2.19+ doit être installé sur votre poste. Depuis le dépôt :
 
 ```sh
 cd ~/Documents/ansible-knowledge-platform
-ansible-playbook --version
-```
-
-Pour récupérer le dépôt sur un autre poste :
-
-```sh
-git clone https://github.com/Altorru/ansible-knowledge-platform.git
-cd ansible-knowledge-platform
-```
-
-Le dépôt GitHub est privé : le compte utilisé doit y avoir accès.
-
-### 2. Renseigner le VPS et les domaines
-
-Créer l'inventory sans écraser un fichier déjà renseigné :
-
-```sh
 cp -n inventory/hosts.example.yml inventory/hosts.yml
 ```
 
-Dans `inventory/hosts.yml`, remplacer l'adresse, l'utilisateur et le port par ceux du VPS :
+Modifier uniquement `inventory/hosts.yml` :
 
 ```yaml
 all:
@@ -40,103 +23,76 @@ all:
     knowledge:
       hosts:
         knowledge_01:
-          ansible_host: vps.example.com
-          ansible_user: deploy
-          ansible_port: 22
+          ansible_host: 203.0.113.10       # Adresse réelle du VPS
+          ansible_user: root             # Ou votre utilisateur sudo
+          platform_email: vous@entreprise.fr
 ```
 
-Utiliser `ansible_user: root` si le compte fourni par l'hébergeur est root. **Ne pas écrire le mot de passe dans l'inventory** : il sera demandé dans le terminal. L'inventory réel est ignoré par Git.
+Le port SSH est 22 par défaut. Ajouter `ansible_port` seulement si l'hébergeur utilise un autre port. Le mot de passe SSH sera demandé au lancement ; l'inventory réel est ignoré par Git.
 
-Dans `inventory/group_vars/knowledge/main.yml`, remplacer au minimum ces valeurs :
+### 2. Se connecter une première fois
 
-```yaml
-git_domain: git.example.com
-docs_domain: docs.example.com
-certificate_email: admin@example.com
-forgejo_admin_email: admin@example.com
-```
-
-Ces exemples sont à remplacer par vos propres domaines et emails. Faire pointer les deux noms DNS vers le VPS et garder `tls_mode: letsencrypt`. Les valeurs `.invalid` du modèle sont refusées par le playbook.
-
-### 3. Vérifier la connexion SSH
-
-Remplacer l'adresse, l'utilisateur et le port dans cette commande :
+Remplacer l'adresse par celle du VPS et adapter l'utilisateur si nécessaire :
 
 ```sh
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -p 22 deploy@vps.example.com
+ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive root@203.0.113.10
 ```
 
-À la première connexion, comparer l'empreinte du serveur avec celle fournie par l'hébergeur avant de l'accepter. Saisir le mot de passe SSH, puis taper `exit` pour revenir sur le Mac. Cela enregistre l'identité du serveur ; aucune clé d'authentification SSH n'est créée.
+Vérifier l'empreinte du serveur auprès de l'hébergeur avant de l'accepter. Saisir le mot de passe SSH, puis `exit` pour revenir sur votre poste. Aucune clé d'authentification SSH n'est nécessaire.
 
-### 4. Déployer en une commande
+### 3. Déployer
 
-Avec un utilisateur qui utilise sudo :
+Avec `root` :
 
 ```sh
-ansible-playbook -i inventory/hosts.yml deploy.yml -k -K
+ansible-playbook deploy.yml -k
 ```
 
-Avec `ansible_user: root` :
+Avec un utilisateur sudo :
 
 ```sh
-ansible-playbook -i inventory/hosts.yml deploy.yml -k -e ansible_become=false
+ansible-playbook deploy.yml -k -K
 ```
 
-Ansible demande les mots de passe dans le terminal, sans les afficher :
+Deux secrets sont demandés : le **mot de passe SSH**, puis un **mot de passe plateforme d'au moins 16 caractères** à choisir pour Forgejo et la consultation des docs. Avec sudo, `-K` demande également son mot de passe ; l'omettre si sudo ne demande pas de mot de passe. Aucun Vault nécessaire.
 
-| Demande | Mot de passe à saisir |
-| --- | --- |
-| `SSH password` (`-k`) | Mot de passe SSH du VPS |
-| `BECOME password` (`-K`) | Mot de passe sudo ; souvent le même que SSH |
-| Mot de passe initial Forgejo | Choisir au moins 16 caractères pour le compte `docsadmin` |
-| Mot de passe de consultation du site | Choisir au moins 16 caractères pour l'utilisateur `docs` |
+### 4. Utiliser
 
-Pour un utilisateur avec sudo sans mot de passe, omettre simplement `-K`. Les connexions Ansible sont configurées pour utiliser le mot de passe SSH. Aucun Vault n'est nécessaire pour ce quickstart.
+Les adresses exactes sont affichées à la fin du déploiement :
 
-Le déploiement installe la plateforme et met à jour les paquets Debian, sans migration majeure ni redémarrage automatique. Pour réserver les mises à jour au playbook de maintenance, mettre `platform_upgrade_packages: false` dans `inventory/group_vars/knowledge/main.yml`.
+| Service | Adresse automatique | Identifiant |
+| --- | --- | --- |
+| Documentation | `https://ADRESSE_DU_VPS/` | `docs` |
+| Forgejo | `https://ADRESSE_DU_VPS:8443/` | `docsadmin` |
+| Dépôt privé | `https://ADRESSE_DU_VPS:8443/docsadmin/base-connaissance.git` | `docsadmin` |
 
-### 5. Ouvrir et vérifier la plateforme
+Les deux comptes utilisent le mot de passe plateforme choisi. HTTPS utilise par défaut un **certificat auto-signé valable dix ans** : le navigateur affiche un avertissement. Pour Git, importer ce certificat dans les autorités de confiance de votre poste ; éviter de désactiver globalement la vérification TLS. Le certificat public est disponible sur le VPS à l'emplacement affiché à la fin du déploiement. Aucun domaine ni service DNS extérieur n'est nécessaire.
 
-- Ouvrir `https://git.example.com` : compte `docsadmin` et mot de passe Forgejo choisi.
-- Ouvrir `https://docs.example.com` : utilisateur `docs` et mot de passe de consultation choisi.
-
-Remplacer les domaines par ceux renseignés à l'étape 2. Vérifier les services depuis le Mac :
+Vérifier les services avec root :
 
 ```sh
-ansible-playbook -i inventory/hosts.yml verify.yml -k -K
+ansible-playbook verify.yml -k
 ```
 
-Avec root, remplacer `-K` par `-e ansible_become=false`, comme pour le déploiement. La vérification demande aussi le mot de passe de consultation.
-
-Pour réappliquer la configuration, relancer la commande de déploiement avec les mots de passe applicatifs actuels. Les documents existants sont conservés. Pour publier votre première page, suivre [Modifier les documents](#modifier-les-documents).
-
-## Résultat
-
-- `https://git.VOTRE-DOMAINE/` : Forgejo, connecté avec `forgejo_admin_user` (par défaut `docsadmin`).
-- `https://docs.VOTRE-DOMAINE/` : documentation, utilisateur `docs` et mot de passe partagé.
-- Dépôt initial privé : `https://git.VOTRE-DOMAINE/docsadmin/base-connaissance.git`.
-- Services natifs : Forgejo, Nginx, publication toutes les 60 secondes, première sauvegarde vérifiée puis sauvegarde quotidienne.
-
-Les domaines réels proviennent de l'inventory. Les inscriptions publiques sont désactivées. Pour démarrer simplement, l'équipe peut utiliser le compte du dépôt ; des comptes individuels et collaborateurs peuvent ensuite être ajoutés dans Forgejo sans changer le déploiement.
-
-Git passe par HTTPS : le mot de passe du compte fonctionne tant que son authentification ne nécessite pas de jeton (par exemple après activation de 2FA). Cela ne nécessite aucune clé SSH.
+Avec sudo, ajouter `-K` si un mot de passe sudo est nécessaire. Relancer la commande de déploiement pour réappliquer la configuration en saisissant le mot de passe plateforme actuel : les documents existants sont conservés.
 
 ## Modifier les documents
 
+Dans Forgejo, ouvrir `docsadmin/base-connaissance`, puis éditer les fichiers Markdown dans `docs/` directement dans le navigateur. Le site est reconstruit automatiquement dans la minute suivant le commit, plus la durée du build.
+
+Pour travailler avec Git, après avoir fait confiance au certificat du serveur :
+
 ```sh
-git clone https://git.VOTRE-DOMAINE/docsadmin/base-connaissance.git
+git clone https://ADRESSE_DU_VPS:8443/docsadmin/base-connaissance.git
 cd base-connaissance
-```
-
-Modifier les fichiers dans `docs/`, puis :
-
-```sh
+# Modifier les fichiers Markdown dans docs/
 git add docs/
 git commit -m "Documenter la procédure de livraison"
+git pull --rebase
 git push origin main
 ```
 
-Le site s'actualise normalement dans la minute suivant le push, plus la durée du build. Il faut récupérer les changements des collègues avant de pousser (`git pull --rebase`) et résoudre les conflits éventuels. Tous les collaborateurs du dépôt peuvent modifier la documentation.
+Git demande le compte Forgejo et son mot de passe. Les inscriptions publiques sont désactivées ; l'administrateur peut créer des comptes individuels et les ajouter comme collaborateurs du dépôt. Avec la 2FA, utiliser un jeton Forgejo pour Git HTTPS.
 
 Prévisualisation locale facultative :
 
@@ -146,7 +102,7 @@ python3 -m venv .venv
 .venv/bin/mkdocs serve
 ```
 
-Les fichiers Markdown sont la source de vérité. Le navigateur permet la consultation et Forgejo permet aussi l'édition des fichiers. Le premier déploiement initialise seulement un dépôt vide ; les suivants ne remplacent jamais les documents existants.
+Les fichiers Markdown sont la source de vérité. Le premier déploiement initialise uniquement un dépôt vide ; les suivants ne remplacent jamais les documents existants.
 
 ## Publication fiable
 
@@ -166,14 +122,16 @@ La configuration `mkdocs.yml` et les dépendances du serveur sont administrées 
 Pour ne pas ressaisir les mots de passe applicatifs :
 
 ```sh
+mkdir -p inventory/group_vars/knowledge
 ansible-vault create inventory/group_vars/knowledge/vault.yml
 ```
 
 Contenu à saisir dans l'éditeur :
 
 ```yaml
-vault_forgejo_admin_password: 'votre-mot-de-passe-forgejo'
-vault_docs_password: 'votre-mot-de-passe-documentation'
+vault_forgejo_admin_password: 'votre-mot-de-passe-plateforme'
+# Facultatif : séparer le mot de passe de consultation
+# vault_docs_password: 'autre-mot-de-passe-documentation'
 # Optionnel, pour éviter -k / -K :
 ansible_password: 'votre-mot-de-passe-ssh'
 ansible_become_password: 'votre-mot-de-passe-sudo'
@@ -189,13 +147,13 @@ Si SSH et sudo sont définis dans Vault, omettre `-k -K`. Le fichier Vault est i
 
 Le mot de passe Forgejo est créé une fois, puis n'est pas réinitialisé automatiquement. Si l'administrateur le change dans Forgejo, mettre à jour Vault ou saisir ce nouveau mot de passe lors des déploiements suivants. Le mot de passe partagé de documentation peut être modifié en relançant Ansible.
 
-## TLS
+## Paramètres avancés (facultatifs)
 
-`tls_mode: letsencrypt` est le mode par défaut : certificat public pour les deux domaines, renouvellement par `certbot.timer` et rechargement Nginx après renouvellement. Renseigner un email valide et vérifier les enregistrements DNS A/AAAA. L'accord aux conditions Let's Encrypt est fourni par le playbook lors de son exécution.
+Les paramètres techniques sont définis dans `roles/platform/defaults/main.yml` : comptes applicatifs, dépôt `base-connaissance`, branche `main`, ports, versions et sauvegardes. Aucun de ces paramètres n'est à renseigner pour démarrer. Ansible met à jour les paquets Debian sans migration majeure ni redémarrage automatique.
 
-`tls_mode: selfsigned` est réservé aux tests ou réseaux internes avec une autorité de confiance administrée séparément. Le certificat généré n'est pas reconnu par les navigateurs et n'est pas renouvelé automatiquement. Aucun contenu documentaire n'est accessible en HTTP sans TLS.
+Pour utiliser des domaines et un certificat public plus tard, ajouter dans l'inventory `git_domain`, `docs_domain` (deux domaines distincts pointant vers le VPS) et `tls_mode: letsencrypt`. L'email déjà renseigné sert aussi pour Let's Encrypt. Les deux services utilisent alors le port 443 ; ouvrir également le port 80 pour les challenges et le renouvellement automatique. Les conditions Let's Encrypt sont acceptées lors du déploiement.
 
-Le playbook n'altère pas les règles du pare-feu ni la configuration SSH. Ouvrir 80/443 auprès de l'hébergeur si nécessaire. Forgejo écoute uniquement sur `127.0.0.1:3000`. Aucun port Git SSH supplémentaire n'est ouvert.
+Le playbook n'altère ni le pare-feu ni la configuration SSH. Forgejo écoute en interne sur `127.0.0.1:3000`, derrière Nginx. La consultation reste protégée par mot de passe. Pour éviter les mises à jour système au déploiement, ajouter `platform_upgrade_packages: false` dans l'inventory.
 
 ## Sauvegardes
 
@@ -221,11 +179,11 @@ sudo /usr/local/sbin/knowledge-backup
 
 Tester la restauration sur un VPS isolé avant un incident réel :
 
-1. Installer la même version de cette plateforme avec Ansible et des domaines de test.
+1. Installer la même version de cette plateforme avec Ansible sur un VPS de test.
 2. Arrêter les timers, `knowledge-publish.service` et Forgejo.
 3. Vérifier l'archive (`tar -tzf`) puis extraire dans un répertoire temporaire protégé.
 4. Remplacer `/var/lib/forgejo`, `/etc/forgejo` et `/srv/knowledge` avec les fichiers sauvegardés. Si les identifiants numériques des comptes ont changé, réattribuer `/var/lib/forgejo` à `forgejo:forgejo` et `/srv/knowledge` à `knowledge:knowledge`, puis réappliquer les permissions de configuration avec Ansible.
-5. Restaurer les paramètres métier et secrets nécessaires ; adapter les domaines et obtenir de nouveaux certificats avec Ansible. Les certificats Let's Encrypt ne sont pas inclus dans l'archive.
+5. Restaurer les paramètres métier et secrets nécessaires ; adapter la cible SSH et recréer les certificats avec Ansible. Les certificats Let's Encrypt ne sont pas inclus dans l'archive.
 6. Redémarrer Forgejo, relancer Ansible, vérifier le clone, les documents, l'authentification et les timers.
 
 Ne pas extraire aveuglément une archive sur un serveur existant. Restic permet d'abord de récupérer l'archive sur une machine isolée. Le protocole de restauration complet doit être validé dans votre environnement.
@@ -237,15 +195,16 @@ ansible-playbook verify.yml -k -K
 ansible-playbook maintenance.yml -k -K
 ```
 
-Si vous avez créé un fichier Vault, ajouter `--ask-vault-pass` à ces commandes. Avec root, remplacer `-K` par `-e ansible_become=false`.
+Si vous avez créé un fichier Vault, ajouter `--ask-vault-pass` à ces commandes. Avec root, omettre `-K` ; Ansible utilise automatiquement les droits du compte connecté.
 
-`verify.yml` utilise `vault_docs_password` ou demande le mot de passe de consultation, et vérifie les services et le site depuis le VPS. Pour vérifier aussi l'accès externe et la validité du certificat, ouvrir les deux domaines depuis un poste utilisateur.
+`verify.yml` utilise `vault_docs_password` ou demande le mot de passe de consultation, et vérifie les services et le site depuis le VPS. Pour vérifier aussi l'accès externe et la validité du certificat, ouvrir les deux adresses affichées depuis un poste utilisateur.
 
 `maintenance.yml` réalise une sauvegarde puis une mise à jour Debian sans suppression automatique de paquets ni migration majeure. Il signale le besoin de redémarrage. MkDocs et Forgejo restent fixés : une mise à jour applicative consiste à mettre à jour les versions/checksums ou le fichier de dépendances, à vérifier en test puis à relancer Ansible. La sauvegarde est déclenchée avant un changement du binaire Forgejo. Une migration de base peut empêcher un simple retour à l'ancien binaire : restaurer les données correspondantes.
 
-Le mode `--check` ne remplace pas un déploiement de test et ne convient pas à une cible vierge sans Python ni fichiers de configuration. Les contrôles syntaxiques fonctionnent sans serveur :
+Le mode `--check` ne remplace pas un déploiement de test et ne convient pas à une cible vierge sans Python ni fichiers de configuration. Les contrôles de configuration et de syntaxe fonctionnent sans serveur :
 
 ```sh
+ansible-playbook -i localhost, tests/config.yml
 ansible-playbook -i inventory/hosts.example.yml deploy.yml --syntax-check
 ansible-playbook -i inventory/hosts.example.yml maintenance.yml --syntax-check
 ansible-playbook -i inventory/hosts.example.yml verify.yml --syntax-check

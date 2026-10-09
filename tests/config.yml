@@ -1,0 +1,48 @@
+---
+- name: Vérifier la configuration automatique sans serveur
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    ansible_host: 203.0.113.10
+    ansible_user: root
+    platform_email: test@example.com
+    tls_certificate: /tmp/test.crt
+    tls_key: /tmp/test.key
+    forgejo_secret_key: test
+    forgejo_internal_token: test
+    oauth_jwt: {content: dGVzdA==}
+  roles:
+    - role: platform
+      tags: [never]
+  tasks:
+    - name: Vérifier les accès par adresse IP et les paramètres automatiques
+      ansible.builtin.assert:
+        that:
+          - git_domain == ansible_host
+          - docs_domain == ansible_host
+          - git_url == 'https://203.0.113.10:8443'
+          - docs_url == 'https://203.0.113.10'
+          - forgejo_admin_email == platform_email
+          - certificate_email == platform_email
+          - forgejo_admin_user == 'docsadmin'
+          - knowledge_repo == 'base-connaissance'
+          - knowledge_branch == 'main'
+          - tls_mode == 'selfsigned'
+    - name: Vérifier les templates avec une adresse IP
+      vars:
+        web_config: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/platform/templates/nginx.conf.j2') }}"
+        git_config: "{{ lookup('ansible.builtin.template', playbook_dir ~ '/../roles/platform/templates/app.ini.j2') }}"
+      ansible.builtin.assert:
+        that:
+          - "'listen 8443 ssl;' in web_config"
+          - "'listen 443 ssl;' in web_config"
+          - "'ROOT_URL = https://203.0.113.10:8443/' in git_config"
+    - name: Vérifier que des domaines facultatifs retrouvent le port HTTPS standard
+      vars:
+        git_domain: git.example.com
+        docs_domain: docs.example.com
+      ansible.builtin.assert:
+        that:
+          - git_url == 'https://git.example.com'
+          - docs_url == 'https://docs.example.com'

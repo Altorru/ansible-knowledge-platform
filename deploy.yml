@@ -1,22 +1,15 @@
 ---
 - name: Déployer la plateforme documentaire autonome
   hosts: knowledge
-  become: true
+  become: "{{ ansible_user | default('root') != 'root' }}"
   gather_facts: false
   pre_tasks:
     - name: Saisir le mot de passe initial Forgejo
       ansible.builtin.pause:
-        prompt: Mot de passe initial Forgejo (16 caractères minimum)
+        prompt: 'Mot de passe plateforme : Forgejo et documentation (16 caractères minimum)'
         echo: false
       register: admin_password_prompt
       when: vault_forgejo_admin_password is not defined and prompted_admin_password is not defined
-      no_log: true
-    - name: Saisir le mot de passe de consultation
-      ansible.builtin.pause:
-        prompt: Mot de passe de consultation du site (16 caractères minimum)
-        echo: false
-      register: docs_password_prompt
-      when: vault_docs_password is not defined and prompted_docs_password is not defined
       no_log: true
     - name: Vérifier la cible sans Python
       ansible.builtin.raw: |
@@ -36,7 +29,7 @@
     - name: Charger les secrets saisis
       ansible.builtin.set_fact:
         forgejo_admin_password: "{{ vault_forgejo_admin_password | default(prompted_admin_password | default((admin_password_prompt | default({})).get('user_input', ''))) }}"
-        docs_password: "{{ vault_docs_password | default(prompted_docs_password | default((docs_password_prompt | default({})).get('user_input', ''))) }}"
+        docs_password: "{{ vault_docs_password | default(prompted_docs_password | default(vault_forgejo_admin_password | default(prompted_admin_password | default((admin_password_prompt | default({})).get('user_input', ''))))) }}"
       no_log: true
     - name: Valider la configuration avant toute installation
       ansible.builtin.assert:
@@ -47,8 +40,10 @@
           - git_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
           - docs_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
           - "'.invalid' not in git_domain and '.invalid' not in docs_domain"
-          - git_domain != docs_domain
+          - platform_email | default('') is match('^[^@\s]+@[^@\s]+\.[^@\s]+$')
           - tls_mode in ['letsencrypt', 'selfsigned']
+          - git_domain != docs_domain or git_https_port | int != docs_https_port | int
+          - tls_mode != 'letsencrypt' or git_domain != docs_domain
           - forgejo_admin_user is match('^[a-z][a-z0-9_-]+$')
           - knowledge_repo is match('^[a-z][a-z0-9_-]+$')
           - knowledge_branch == 'main'
@@ -56,7 +51,7 @@
           - docs_password | length >= 16
           - "tls_mode != 'letsencrypt' or '.invalid' not in certificate_email"
           - "not backup_restic_repository or vault_restic_password | default('') | length >= 16"
-        fail_msg: 'Renseigner la cible, les domaines et des mots de passe de 16 caractères minimum. Debian 12+ requis.'
+        fail_msg: 'Renseigner la cible SSH, platform_email et un mot de passe plateforme de 16 caractères minimum. Debian 12+ requis.'
       no_log: true
   roles:
     - platform

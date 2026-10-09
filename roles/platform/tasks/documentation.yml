@@ -34,6 +34,7 @@
 
 - name: Créer le compte et initialiser uniquement un dépôt vide
   ansible.builtin.command: python3 /usr/local/lib/knowledge/bootstrap_repo.py
+  become: true
   become_user: forgejo
   environment:
     HOME: /var/lib/forgejo
@@ -82,6 +83,7 @@
 
 - name: Construire la première version et appliquer les changements de configuration
   ansible.builtin.command: /opt/knowledge/venv/bin/python /usr/local/lib/knowledge/publish.py /etc/knowledge/publish.json
+  become: true
   become_user: knowledge
   register: first_build
   changed_when: "'PUBLISHED:' in first_build.stdout"

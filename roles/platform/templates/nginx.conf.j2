@@ -3,11 +3,11 @@ server {
     listen [::]:80;
     server_name {{ git_domain }} {{ docs_domain }};
     location /.well-known/acme-challenge/ { root /var/www/knowledge-acme; }
-    location / { return 301 https://$host$request_uri; }
+    location / { return 301 {{ docs_url }}$request_uri; }
 }
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen {{ git_https_port }} ssl;
+    listen [::]:{{ git_https_port }} ssl;
     server_name {{ git_domain }};
     ssl_certificate {{ tls_certificate }};
     ssl_certificate_key {{ tls_key }};
@@ -23,8 +23,8 @@ server {
     }
 }
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
+    listen {{ docs_https_port }} ssl;
+    listen [::]:{{ docs_https_port }} ssl;
     server_name {{ docs_domain }};
     ssl_certificate {{ tls_certificate }};
     ssl_certificate_key {{ tls_key }};

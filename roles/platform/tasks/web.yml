@@ -78,16 +78,16 @@
     creates: '{{ tls_certificate }}'
   when: tls_mode == 'letsencrypt'
 
-- name: Créer le dossier TLS pour les tests
+- name: Créer le dossier TLS automatique
   ansible.builtin.file:
     path: /etc/knowledge/tls
     state: directory
     mode: '0700'
   when: tls_mode == 'selfsigned'
 
-- name: Créer un certificat de test auto-signé
+- name: Créer un certificat HTTPS auto-signé
   ansible.builtin.command:
-    argv: [openssl, req, -x509, -newkey, 'rsa:3072', -nodes, -days, '365', -keyout, '{{ tls_key }}', -out, '{{ tls_certificate }}', -subj, '/CN={{ docs_domain }}', -addext, 'subjectAltName=DNS:{{ git_domain }},DNS:{{ docs_domain }}']
+    argv: [openssl, req, -x509, -newkey, 'rsa:3072', -nodes, -days, '3650', -keyout, '{{ tls_key }}', -out, '{{ tls_certificate }}', -subj, '/CN={{ docs_domain }}', -addext, 'subjectAltName={{ "IP" if git_domain is match("^[0-9.]+$") else "DNS" }}:{{ git_domain }},{{ "IP" if docs_domain is match("^[0-9.]+$") else "DNS" }}:{{ docs_domain }}']
     creates: '{{ tls_certificate }}'
   when: tls_mode == 'selfsigned'
 
@@ -124,14 +124,14 @@
 
 - name: Vérifier que le site exige une authentification
   ansible.builtin.uri:
-    url: https://127.0.0.1/
+    url: 'https://127.0.0.1:{{ docs_https_port }}/'
     headers: {Host: '{{ docs_domain }}'}
     validate_certs: false
     status_code: 401
 
 - name: Vérifier la documentation publiée
   ansible.builtin.uri:
-    url: https://127.0.0.1/
+    url: 'https://127.0.0.1:{{ docs_https_port }}/'
     headers: {Host: '{{ docs_domain }}'}
     url_username: docs
     url_password: '{{ docs_password }}'
@@ -143,7 +143,8 @@
 - name: Afficher les accès
   ansible.builtin.debug:
     msg:
-      - 'Forgejo : https://{{ git_domain }}/'
-      - 'Documentation : https://{{ docs_domain }}/ (utilisateur docs)'
-      - 'Clone : https://{{ git_domain }}/{{ forgejo_admin_user }}/{{ knowledge_repo }}.git'
+      - 'Forgejo : {{ git_url }}/'
+      - 'Documentation : {{ docs_url }}/ (utilisateur docs)'
+      - 'Clone : {{ git_url }}/{{ forgejo_admin_user }}/{{ knowledge_repo }}.git'
+      - 'Certificat public à importer sur les postes : {{ tls_certificate }}'
       - 'Sauvegarde locale quotidienne ; activer Restic pour une copie extérieure.'

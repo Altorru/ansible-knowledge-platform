@@ -1,15 +1,18 @@
 ---
 - name: Vérifier les services sur le serveur
   hosts: knowledge
-  become: true
+  become: "{{ ansible_user | default('root') != 'root' }}"
   gather_facts: false
+  roles:
+    - role: platform
+      tags: [never]
   pre_tasks:
     - name: Saisir le mot de passe du site si absent de Vault
       ansible.builtin.pause:
         prompt: Mot de passe de consultation du site
         echo: false
       register: verify_password_prompt
-      when: vault_docs_password is not defined and prompted_docs_password is not defined
+      when: vault_docs_password is not defined and vault_forgejo_admin_password is not defined and prompted_docs_password is not defined and prompted_admin_password is not defined
       no_log: true
   tasks:
     - name: Vérifier les services et timers
@@ -19,11 +22,11 @@
       changed_when: false
     - name: Vérifier le site publié localement avec TLS
       ansible.builtin.uri:
-        url: https://127.0.0.1/
+        url: 'https://127.0.0.1:{{ docs_https_port }}/'
         headers:
           Host: '{{ docs_domain }}'
         url_username: docs
-        url_password: "{{ vault_docs_password | default(prompted_docs_password | default((verify_password_prompt | default({})).get('user_input', ''))) }}"
+        url_password: "{{ vault_docs_password | default(prompted_docs_password | default(vault_forgejo_admin_password | default(prompted_admin_password | default((verify_password_prompt | default({})).get('user_input', ''))))) }}"
         force_basic_auth: true
         validate_certs: false
         status_code: 200

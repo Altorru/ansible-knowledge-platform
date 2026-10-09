@@ -1,7 +1,7 @@
 ---
 - name: Mettre à jour Debian sans migration ni redémarrage automatique
   hosts: knowledge
-  become: true
+  become: "{{ ansible_user | default('root') != 'root' }}"
   gather_facts: true
   tasks:
     - name: Vérifier Debian

@@ -29,3 +29,17 @@ Les tests ont été réalisés localement dans des environnements Debian avec sy
 Quatre tests automatisés exécutent de vrais builds MkDocs (`tests/test_publish.py`) ; ils vérifient publication/no-op, échec puis reprise, non-exécution de hooks et rejet des liens symboliques.
 
 La validation couvre le parcours local complet. Elle ne couvre pas encore un certificat Let's Encrypt sur de vrais domaines, le réseau de votre VPS, un envoi Restic extérieur ou une restauration complète sur un autre VPS. Les SHA256 amd64 et arm64 correspondent aux releases Forgejo officielles ; les tests d'exécution ont utilisé arm64.
+
+## Configuration simplifiée
+
+Le parcours avec adresse SSH, utilisateur root et un seul email a été testé à nouveau sur Debian 13 arm64 avec systemd, dans un environnement isolé. L'adresse d'accès est déduite de la cible ; seuls l'email et un mot de passe applicatif ont été fournis, en plus des informations de connexion du test.
+
+- Déploiement avec valeurs automatiques, ports HTTPS 443/8443 et un seul mot de passe applicatif : réussi.
+- Relance : 47 tâches réussies, zéro changement, zéro erreur.
+- `verify.yml` : trois contrôles réussis, sans exécuter les tâches d'installation.
+- Consultation HTTPS avec certificat explicitement approuvé : 401 sans compte, 200 avec le compte `docs`.
+- Accès Git HTTPS avec le même mot de passe et certificat approuvé : branche `main` accessible.
+- Déploiement en accès IPv4 direct : réussi ; identité TLS de l’adresse IP vérifiée avec le certificat approuvé, consultation et clone Git réussis.
+- `tests/config.yml` : valeurs automatiques, templates pour adresse IPv4 et domaines facultatifs vérifiés sans serveur.
+
+Le test de déploiement utilise une connexion Docker locale pour isoler Debian ; la configuration SSH par mot de passe est inchangée. Aucun VPS utilisateur n'a été contacté.

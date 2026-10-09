@@ -10,4 +10,17 @@ forgejo_architectures:
 publish_interval: 60s
 backup_retention_days: 7
 backup_restic_repository: ''
-tls_mode: letsencrypt
+# Accès automatique sans DNS à configurer.
+ansible_user: root
+forgejo_admin_user: docsadmin
+forgejo_admin_email: '{{ platform_email }}'
+certificate_email: '{{ platform_email }}'
+knowledge_repo: base-connaissance
+knowledge_branch: main
+git_domain: '{{ ansible_host | default(inventory_hostname) }}'
+docs_domain: '{{ ansible_host | default(inventory_hostname) }}'
+git_https_port: '{{ 8443 if git_domain == docs_domain else 443 }}'
+docs_https_port: 443
+git_url: 'https://{{ git_domain }}{{ ":" ~ git_https_port if git_https_port | int != 443 else "" }}'
+docs_url: 'https://{{ docs_domain }}{{ ":" ~ docs_https_port if docs_https_port | int != 443 else "" }}'
+tls_mode: selfsigned

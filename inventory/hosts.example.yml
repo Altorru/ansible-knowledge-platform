@@ -5,5 +5,5 @@ all:
       hosts:
         knowledge_01:
           ansible_host: vps.example.invalid
-          ansible_user: deploy
-          ansible_port: 22
+          ansible_user: root
+          platform_email: admin@example.com

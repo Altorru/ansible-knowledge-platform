@@ -1,7 +1,7 @@
 ---
 - name: Installer les paquets nécessaires
   ansible.builtin.apt:
-    name: [git, git-lfs, nginx, python3-venv, python3-apt, python3-packaging, python3-setuptools, acl, openssl, apache2-utils, certbot, restic, ca-certificates]
+    name: [sudo, git, git-lfs, nginx, python3-venv, python3-apt, python3-packaging, python3-setuptools, acl, openssl, apache2-utils, certbot, restic, ca-certificates]
     state: present
     update_cache: true
     cache_valid_time: 3600
