@@ -31,8 +31,6 @@ server {
     ssl_protocols TLSv1.2 TLSv1.3;
     root /srv/knowledge/current;
     index index.html;
-    auth_basic "Documentation entreprise";
-    auth_basic_user_file /etc/nginx/knowledge.htpasswd;
     add_header X-Content-Type-Options nosniff always;
     location / { try_files $uri $uri/ =404; }
 }

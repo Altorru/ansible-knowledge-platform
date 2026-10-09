@@ -1,28 +1,4 @@
 ---
-- name: Vérifier le mot de passe de consultation existant
-  ansible.builtin.command:
-    argv: [htpasswd, -v, -i, /etc/nginx/knowledge.htpasswd, docs]
-    stdin: '{{ docs_password }}'
-  register: docs_auth_check
-  changed_when: false
-  failed_when: false
-  no_log: true
-
-- name: Configurer le mot de passe partagé de consultation
-  ansible.builtin.command:
-    argv: [htpasswd, -c, -B, -i, /etc/nginx/knowledge.htpasswd, docs]
-    stdin: '{{ docs_password }}'
-  when: docs_auth_check.rc != 0
-  changed_when: true
-  no_log: true
-
-- name: Protéger le fichier de mots de passe
-  ansible.builtin.file:
-    path: /etc/nginx/knowledge.htpasswd
-    owner: root
-    group: www-data
-    mode: '0640'
-
 - name: Sélectionner les chemins des certificats
   ansible.builtin.set_fact:
     tls_certificate: '{{ "/etc/letsencrypt/live/" ~ certificate_name ~ "/fullchain.pem" if tls_mode == "letsencrypt" else "/etc/knowledge/tls/" ~ certificate_name ~ ".crt" }}'
@@ -128,29 +104,23 @@
 - name: Appliquer HTTPS
   ansible.builtin.meta: flush_handlers
 
-- name: Vérifier que le site exige une authentification
-  ansible.builtin.uri:
-    url: 'https://127.0.0.1:{{ docs_https_port }}/'
-    headers: {Host: '{{ docs_domain }}'}
-    validate_certs: false
-    status_code: 401
-
 - name: Vérifier la documentation publiée
   ansible.builtin.uri:
     url: 'https://127.0.0.1:{{ docs_https_port }}/'
     headers: {Host: '{{ docs_domain }}'}
-    url_username: docs
-    url_password: '{{ docs_password }}'
-    force_basic_auth: true
     validate_certs: false
     status_code: 200
-  no_log: true
+
+- name: Supprimer les anciens identifiants Basic Auth
+  ansible.builtin.file:
+    path: /etc/nginx/knowledge.htpasswd
+    state: absent
 
 - name: Afficher les accès
   ansible.builtin.debug:
     msg:
       - 'Forgejo : {{ git_url }}/'
-      - 'Documentation : {{ docs_url }}/ (utilisateur docs)'
+      - 'Documentation : {{ docs_url }}/ (accès sans authentification)'
       - 'Clone : {{ git_url }}/{{ forgejo_admin_user }}/{{ knowledge_repo }}.git'
       - 'Certificat public à importer sur les postes : {{ tls_certificate }}'
       - 'Sauvegarde locale quotidienne ; activer Restic pour une copie extérieure.'

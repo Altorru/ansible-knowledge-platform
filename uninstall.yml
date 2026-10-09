@@ -1,0 +1,220 @@
+---
+- name: Désinstaller entièrement la plateforme documentaire
+  hosts: knowledge
+  become: "{{ ansible_user | default('root') != 'root' }}"
+  gather_facts: true
+  tasks:
+    - name: Vérifier le système cible
+      ansible.builtin.assert:
+        that: ansible_facts.distribution == 'Debian'
+        fail_msg: 'La désinstallation cible Debian uniquement.'
+
+    - name: Vérifier le suivi des paquets de la plateforme
+      ansible.builtin.stat:
+        path: /var/lib/knowledge-platform/install-state.json
+      register: state_file
+
+    - name: Initialiser le suivi de désinstallation
+      ansible.builtin.set_fact:
+        uninstall_state: {packages: [], restore_nginx_default: false}
+
+    - name: Lire le suivi d'installation
+      ansible.builtin.slurp:
+        src: /var/lib/knowledge-platform/install-state.json
+      register: saved_state
+      when: state_file.stat.exists
+
+    - name: Charger les paquets appartenant à la plateforme
+      ansible.builtin.set_fact:
+        uninstall_state: '{{ saved_state.content | b64decode | from_json }}'
+      when: state_file.stat.exists
+
+    - name: Recenser les services existants
+      ansible.builtin.service_facts:
+
+    - name: Recenser les unités de la plateforme, y compris les timers
+      ansible.builtin.stat:
+        path: '/etc/systemd/system/{{ item }}'
+      loop:
+        - knowledge-publish.timer
+        - knowledge-backup.timer
+        - knowledge-publish.service
+        - knowledge-backup.service
+        - forgejo.service
+      register: platform_units
+
+    - name: Arrêter et désactiver les timers puis les services de la plateforme
+      ansible.builtin.systemd_service:
+        name: '{{ item.item }}'
+        state: stopped
+        enabled: false
+      loop: '{{ platform_units.results }}'
+      loop_control:
+        label: '{{ item.item }}'
+      when: item.stat.exists or item.item in ansible_facts.services
+
+    - name: Retirer la configuration web et le hook de renouvellement
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: absent
+      loop:
+        - /etc/nginx/sites-enabled/knowledge.conf
+        - /etc/nginx/sites-available/knowledge.conf
+        - /etc/nginx/knowledge.htpasswd
+        - /etc/letsencrypt/renewal-hooks/deploy/knowledge-nginx
+      register: removed_web
+
+    - name: Vérifier la configuration Nginx initiale
+      ansible.builtin.stat:
+        path: /etc/nginx/sites-available/default
+      register: default_site
+
+    - name: Restaurer le site Nginx initial s'il était actif avant installation
+      ansible.builtin.file:
+        src: /etc/nginx/sites-available/default
+        dest: /etc/nginx/sites-enabled/default
+        state: link
+      when: uninstall_state.restore_nginx_default and default_site.stat.exists
+      register: restored_web
+
+    - name: Valider puis recharger le Nginx conservé
+      when:
+        - "'nginx.service' in ansible_facts.services"
+        - ansible_facts.services['nginx.service'].state == 'running'
+        - removed_web.changed or restored_web.changed
+      block:
+        - ansible.builtin.command: nginx -t
+          changed_when: false
+        - ansible.builtin.systemd_service:
+            name: nginx
+            state: reloaded
+
+    - name: Vérifier les répertoires de certificats publics
+      ansible.builtin.stat:
+        path: '{{ item }}'
+      loop: [/etc/letsencrypt/live, /etc/letsencrypt/archive, /etc/letsencrypt/renewal]
+      register: certificate_dirs
+
+    - name: Recenser uniquement les certificats du namespace de la plateforme
+      ansible.builtin.find:
+        paths: '{{ item.item }}'
+        patterns: '^knowledge-[0-9a-f]{12}(\.conf)?$'
+        use_regex: true
+        file_type: any
+        recurse: false
+      loop: '{{ certificate_dirs.results }}'
+      when: item.stat.exists
+      register: platform_certificates
+      loop_control:
+        label: '{{ item.item }}'
+
+    - name: Retirer les certificats publics de la plateforme
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: absent
+      loop: '{{ platform_certificates.results | selectattr("files", "defined") | map(attribute="files") | flatten | map(attribute="path") | list }}'
+
+    - name: Retirer les unités systemd
+      ansible.builtin.file:
+        path: '/etc/systemd/system/{{ item }}'
+        state: absent
+      loop: [forgejo.service, knowledge-publish.service, knowledge-publish.timer, knowledge-backup.service, knowledge-backup.timer]
+      register: removed_units
+
+    - name: Recharger systemd après suppression des unités
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+      when: removed_units.changed
+
+    - name: Supprimer données, sauvegardes, certificats internes et programmes
+      ansible.builtin.file:
+        path: '{{ item }}'
+        state: absent
+      loop:
+        - /var/lib/forgejo
+        - /etc/forgejo
+        - /srv/knowledge
+        - /etc/knowledge
+        - /opt/knowledge
+        - /var/backups/knowledge
+        - /var/www/knowledge-acme
+        - /usr/local/lib/forgejo
+        - /usr/local/lib/knowledge
+        - /usr/local/bin/forgejo
+        - /usr/local/sbin/knowledge-backup
+
+    - name: Supprimer les comptes de service
+      ansible.builtin.user:
+        name: '{{ item }}'
+        state: absent
+        remove: true
+      loop: [knowledge, forgejo]
+
+    - name: Supprimer les groupes de service
+      ansible.builtin.group:
+        name: '{{ item }}'
+        state: absent
+      loop: [knowledge, forgejo]
+
+    - name: Sélectionner les paquets ajoutés par la plateforme
+      ansible.builtin.set_fact:
+        packages_to_remove: '{{ uninstall_state.packages | difference(["sudo", "python3", "python3-minimal", "python3-apt", "openssh-server", "openssh-client", "ca-certificates"]) }}'
+
+    - name: Repérer les certificats extérieurs restant après nettoyage
+      ansible.builtin.find:
+        paths: '{{ item.item }}'
+        file_type: any
+        recurse: false
+        excludes: README
+      loop: '{{ certificate_dirs.results }}'
+      when: item.stat.exists
+      register: remaining_certificates
+      loop_control:
+        label: '{{ item.item }}'
+
+    - name: Détecter un usage partagé de Certbot
+      ansible.builtin.set_fact:
+        preserve_certbot: '{{ remaining_certificates.results | selectattr("files", "defined") | map(attribute="files") | flatten | length > 0 }}'
+
+    - name: Recenser les dépendances et fournisseurs virtuels du Certbot partagé
+      ansible.builtin.command:
+        argv: [apt-cache, depends, --recurse, --important, certbot]
+      register: shared_certbot_dependencies
+      changed_when: false
+      when: preserve_certbot and 'certbot' in packages_to_remove
+
+    - name: Conserver Certbot et ses dépendances s'il protège d'autres certificats
+      ansible.builtin.set_fact:
+        packages_to_remove: '{{ packages_to_remove | difference(shared_certbot_dependencies.stdout | regex_findall("(?m)^[ \t]*([a-z0-9][a-z0-9+.:_-]*)$")) }}'
+      when: preserve_certbot and shared_certbot_dependencies is not skipped
+
+    - name: Vérifier que la purge ne retire aucun paquet extérieur à la plateforme
+      ansible.builtin.command:
+        argv: '{{ ["apt-get", "-s", "purge"] + packages_to_remove }}'
+      register: purge_plan
+      changed_when: false
+      when: packages_to_remove | length > 0
+
+    - name: Refuser une suppression de dépendances partagées
+      ansible.builtin.assert:
+        that: purge_plan.stdout | regex_findall('(?m)^(?:Remv|Purg) ([^ ]+)') | difference(packages_to_remove) | length == 0
+        fail_msg: 'Des paquets sont utilisés par un autre logiciel. Le plan de purge contient des paquets extérieurs à la plateforme ; les données de la plateforme sont supprimées, mais le suivi est conservé pour réexaminer la purge.'
+      when: packages_to_remove | length > 0
+
+    - name: Purger les paquets installés par la plateforme
+      ansible.builtin.apt:
+        name: '{{ packages_to_remove }}'
+        state: absent
+        purge: true
+        autoremove: false
+        lock_timeout: 120
+      when: packages_to_remove | length > 0
+
+    - name: Supprimer le suivi après une désinstallation réussie
+      ansible.builtin.file:
+        path: /var/lib/knowledge-platform
+        state: absent
+
+    - name: Afficher le résultat
+      ansible.builtin.debug:
+        msg: 'Plateforme, documents et sauvegardes locales supprimés. SSH, outils Ansible et paquets préexistants conservés. Aucun changement sur le proxy extérieur ou le dépôt Restic distant.'

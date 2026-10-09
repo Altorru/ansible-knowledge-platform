@@ -6,7 +6,7 @@
   pre_tasks:
     - name: Saisir le mot de passe initial Forgejo
       ansible.builtin.pause:
-        prompt: 'Mot de passe plateforme : Forgejo et documentation (16 caractères minimum)'
+        prompt: 'Mot de passe administrateur Forgejo (16 caractères minimum)'
         echo: false
       register: admin_password_prompt
       when: vault_forgejo_admin_password is not defined and prompted_admin_password is not defined
@@ -29,7 +29,6 @@
     - name: Charger les secrets saisis
       ansible.builtin.set_fact:
         forgejo_admin_password: "{{ vault_forgejo_admin_password | default(prompted_admin_password | default((admin_password_prompt | default({})).get('user_input', ''))) }}"
-        docs_password: "{{ vault_docs_password | default(prompted_docs_password | default(vault_forgejo_admin_password | default(prompted_admin_password | default((admin_password_prompt | default({})).get('user_input', ''))))) }}"
       no_log: true
     - name: Valider la configuration avant toute installation
       ansible.builtin.import_tasks: roles/platform/tasks/validate.yml

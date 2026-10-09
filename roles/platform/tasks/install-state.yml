@@ -1,0 +1,44 @@
+---
+- name: Recenser les paquets avant installation
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Mémoriser les paquets déjà présents
+  ansible.builtin.set_fact:
+    packages_before_install: '{{ ansible_facts.packages.keys() | list }}'
+
+- name: Préparer le répertoire du suivi d'installation
+  ansible.builtin.file:
+    path: /var/lib/knowledge-platform
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Vérifier la présence du suivi d'installation
+  ansible.builtin.stat:
+    path: /var/lib/knowledge-platform/install-state.json
+  register: install_state_file
+
+- name: Vérifier le site Nginx initial
+  ansible.builtin.stat:
+    path: /etc/nginx/sites-enabled/default
+    follow: false
+  register: original_nginx_default
+
+- name: Initialiser le suivi d'installation
+  ansible.builtin.set_fact:
+    install_state:
+      packages: []
+      restore_nginx_default: '{{ original_nginx_default.stat.exists }}'
+
+- name: Lire le suivi existant
+  ansible.builtin.slurp:
+    src: /var/lib/knowledge-platform/install-state.json
+  register: saved_install_state
+  when: install_state_file.stat.exists
+
+- name: Réutiliser le suivi existant
+  ansible.builtin.set_fact:
+    install_state: '{{ saved_install_state.content | b64decode | from_json }}'
+  when: install_state_file.stat.exists

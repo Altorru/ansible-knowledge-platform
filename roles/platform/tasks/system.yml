@@ -1,11 +1,27 @@
 ---
+- name: Préparer le suivi de désinstallation
+  ansible.builtin.import_tasks: install-state.yml
+
 - name: Installer les paquets nécessaires
   ansible.builtin.apt:
-    name: [sudo, git, git-lfs, nginx, python3-venv, python3-apt, python3-packaging, python3-setuptools, acl, openssl, apache2-utils, certbot, restic, ca-certificates]
+    name: [sudo, git, git-lfs, nginx, python3-venv, python3-apt, python3-packaging, python3-setuptools, acl, openssl, certbot, restic, ca-certificates]
     state: present
     update_cache: true
     cache_valid_time: 3600
     lock_timeout: 120
+
+- name: Recenser les paquets après installation
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Enregistrer les paquets ajoutés par la plateforme
+  ansible.builtin.copy:
+    dest: /var/lib/knowledge-platform/install-state.json
+    owner: root
+    group: root
+    mode: '0600'
+    content: >-
+      {{ {'packages': (install_state.packages | union(ansible_facts.packages.keys() | list | difference(packages_before_install)) | sort), 'restore_nginx_default': install_state.restore_nginx_default} | to_nice_json }}
 
 - name: Mettre à jour Debian sans suppression ni migration majeure
   ansible.builtin.apt:

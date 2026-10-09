@@ -37,6 +37,7 @@
         that:
           - "'listen 8443 ssl;' in web_config"
           - "'listen 443 ssl;' in web_config"
+          - "'auth_basic' not in web_config"
           - "'ROOT_URL = https://203.0.113.10:8443/' in git_config"
     - name: Vérifier que des domaines facultatifs retrouvent le port HTTPS standard
       vars:
@@ -51,14 +52,12 @@
       vars:
         ansible_facts: {distribution: Debian, distribution_major_version: '13', architecture: aarch64}
         forgejo_admin_password: exemple-test-16-caracteres
-        docs_password: exemple-test-16-caracteres
       ansible.builtin.include_tasks: ../roles/platform/tasks/validate.yml
 
     - name: Vérifier le diagnostic d'un mot de passe trop court
       vars:
         ansible_facts: {distribution: Debian, distribution_major_version: '13', architecture: aarch64}
         forgejo_admin_password: court
-        docs_password: court
       block:
         - ansible.builtin.include_tasks: ../roles/platform/tasks/validate.yml
         - ansible.builtin.fail:

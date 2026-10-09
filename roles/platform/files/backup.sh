@@ -19,7 +19,7 @@ archive="/var/backups/knowledge/knowledge-$(date -u +%Y%m%dT%H%M%S)-$$.tar.gz"
 partial="${archive}.partial"
 tar -C / -czf "$partial" etc/forgejo etc/knowledge var/lib/forgejo srv/knowledge \
   opt/knowledge/requirements.txt opt/knowledge/mkdocs.yml \
-  etc/nginx/sites-available/knowledge.conf etc/nginx/knowledge.htpasswd
+  etc/nginx/sites-available/knowledge.conf
 tar -tzf "$partial" >/dev/null
 mv "$partial" "$archive"
 systemctl start forgejo

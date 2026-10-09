@@ -36,7 +36,6 @@
 - name: Vérifier les secrets sans les afficher
   ansible.builtin.set_fact:
     platform_password_valid: '{{ forgejo_admin_password | length >= 16 }}'
-    docs_password_valid: '{{ docs_password | length >= 16 }}'
     restic_password_valid: '{{ not backup_restic_repository or vault_restic_password | default("") | length >= 16 }}'
   no_log: true
 
@@ -44,11 +43,6 @@
   ansible.builtin.assert:
     that: platform_password_valid
     fail_msg: 'Le mot de passe plateforme doit contenir au moins 16 caractères. Relancer et saisir un mot de passe plus long.'
-
-- name: Vérifier le mot de passe documentaire
-  ansible.builtin.assert:
-    that: docs_password_valid
-    fail_msg: 'Le mot de passe documentaire doit contenir au moins 16 caractères. Vérifier vault_docs_password si défini.'
 
 - name: Vérifier le secret de sauvegarde extérieure
   ansible.builtin.assert:

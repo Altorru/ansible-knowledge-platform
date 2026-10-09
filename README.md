@@ -47,7 +47,7 @@ Avec un utilisateur sudo :
 ansible-playbook deploy.yml -k -K
 ```
 
-Deux secrets sont demandés : le **mot de passe SSH**, puis un **mot de passe plateforme d'au moins 16 caractères** à choisir pour Forgejo et la consultation des docs. Avec sudo, `-K` demande également son mot de passe ; l'omettre si sudo ne demande pas de mot de passe. Aucun Vault nécessaire.
+Deux secrets sont demandés : le **mot de passe SSH**, puis un **mot de passe plateforme d'au moins 16 caractères** à choisir pour le compte administrateur Forgejo. Avec sudo, `-K` demande également son mot de passe ; l'omettre si sudo ne demande pas de mot de passe. Aucun Vault nécessaire.
 
 Si la validation refuse la configuration, le message précise désormais la condition à corriger : Debian, adresse SSH, email ou mot de passe. Le mot de passe plateforme doit comporter au moins 16 caractères ; aucun secret n'est affiché dans les diagnostics.
 
@@ -57,11 +57,11 @@ Les adresses exactes sont affichées à la fin du déploiement :
 
 | Service | Adresse automatique | Identifiant |
 | --- | --- | --- |
-| Documentation | `https://ADRESSE_DU_VPS/` | `docs` |
+| Documentation | `https://ADRESSE_DU_VPS/` | Accès libre |
 | Forgejo | `https://ADRESSE_DU_VPS:8443/` | `docsadmin` |
 | Dépôt privé | `https://ADRESSE_DU_VPS:8443/docsadmin/base-connaissance.git` | `docsadmin` |
 
-Les deux comptes utilisent le mot de passe plateforme choisi. HTTPS utilise par défaut un **certificat auto-signé valable dix ans** : le navigateur affiche un avertissement. Pour Git, importer ce certificat dans les autorités de confiance de votre poste ; éviter de désactiver globalement la vérification TLS. Le certificat public est disponible sur le VPS à l'emplacement affiché à la fin du déploiement. Aucun domaine ni service DNS extérieur n'est nécessaire.
+La documentation est consultable sans authentification. Forgejo utilise le compte `docsadmin` et le mot de passe choisi. HTTPS utilise par défaut un **certificat auto-signé valable dix ans** : le navigateur affiche un avertissement. Pour Git, importer ce certificat dans les autorités de confiance de votre poste ; éviter de désactiver globalement la vérification TLS. Le certificat public est disponible sur le VPS à l'emplacement affiché à la fin du déploiement. Aucun domaine ni service DNS extérieur n'est nécessaire.
 
 Vérifier les services avec root :
 
@@ -125,8 +125,6 @@ Contenu à saisir dans l'éditeur :
 
 ```yaml
 vault_forgejo_admin_password: 'votre-mot-de-passe-plateforme'
-# Facultatif : séparer le mot de passe de consultation
-# vault_docs_password: 'autre-mot-de-passe-documentation'
 # Optionnel, pour éviter -k / -K :
 ansible_password: 'votre-mot-de-passe-ssh'
 ansible_become_password: 'votre-mot-de-passe-sudo'
@@ -140,7 +138,7 @@ ansible-playbook deploy.yml -k -K --ask-vault-pass
 
 Si SSH et sudo sont définis dans Vault, omettre `-k -K`. Le fichier Vault est ignoré par Git par défaut, tout comme l'inventory réel. Les secrets internes Forgejo sont générés une fois sur le serveur. Aucun mot de passe ne figure dans les fichiers livrés.
 
-Le mot de passe Forgejo est créé une fois, puis n'est pas réinitialisé automatiquement. Si l'administrateur le change dans Forgejo, mettre à jour Vault ou saisir ce nouveau mot de passe lors des déploiements suivants. Le mot de passe partagé de documentation peut être modifié en relançant Ansible.
+Le mot de passe Forgejo est créé une fois, puis n'est pas réinitialisé automatiquement. Si l'administrateur le change dans Forgejo, mettre à jour Vault ou saisir ce nouveau mot de passe lors des déploiements suivants.
 
 ## Paramètres avancés (facultatifs)
 
@@ -148,7 +146,7 @@ Les paramètres techniques sont définis dans `roles/platform/defaults/main.yml`
 
 Pour utiliser des domaines et un certificat public plus tard, ajouter dans l'inventory `git_domain`, `docs_domain` (deux domaines distincts pointant vers le VPS) et `tls_mode: letsencrypt`. L'email déjà renseigné sert aussi pour Let's Encrypt. Les deux services utilisent alors le port 443 ; ouvrir également le port 80 pour les challenges et le renouvellement automatique. Les conditions Let's Encrypt sont acceptées lors du déploiement.
 
-Le playbook n'altère ni le pare-feu ni la configuration SSH. Forgejo écoute en interne sur `127.0.0.1:3000`, derrière Nginx. La consultation reste protégée par mot de passe. Pour éviter les mises à jour système au déploiement, ajouter `platform_upgrade_packages: false` dans l'inventory.
+Le playbook n'altère ni le pare-feu ni la configuration SSH. Forgejo écoute en interne sur `127.0.0.1:3000`, derrière Nginx. La consultation documentaire est libre ; le dépôt Git reste privé dans Forgejo. Pour éviter les mises à jour système au déploiement, ajouter `platform_upgrade_packages: false` dans l'inventory.
 
 ## Reverse proxy Nginx existant
 
@@ -222,7 +220,7 @@ ansible-playbook maintenance.yml -k -K
 
 Si vous avez créé un fichier Vault, ajouter `--ask-vault-pass` à ces commandes. Avec root, omettre `-K` ; Ansible utilise automatiquement les droits du compte connecté.
 
-`verify.yml` utilise `vault_docs_password` ou demande le mot de passe de consultation, et vérifie les services et le site depuis le VPS. Pour vérifier aussi l'accès externe et la validité du certificat, ouvrir les deux adresses affichées depuis un poste utilisateur.
+`verify.yml` vérifie les services et la consultation sans authentification depuis le VPS. Aucun mot de passe documentaire n’est demandé. Pour vérifier aussi l'accès externe et la validité du certificat, ouvrir les deux adresses affichées depuis un poste utilisateur.
 
 `maintenance.yml` réalise une sauvegarde puis une mise à jour Debian sans suppression automatique de paquets ni migration majeure. Il signale le besoin de redémarrage. MkDocs et Forgejo restent fixés : une mise à jour applicative consiste à mettre à jour les versions/checksums ou le fichier de dépendances, à vérifier en test puis à relancer Ansible. La sauvegarde est déclenchée avant un changement du binaire Forgejo. Une migration de base peut empêcher un simple retour à l'ancien binaire : restaurer les données correspondantes.
 
@@ -233,6 +231,7 @@ ansible-playbook -i localhost, tests/config.yml
 ansible-playbook -i inventory/hosts.example.yml deploy.yml --syntax-check
 ansible-playbook -i inventory/hosts.example.yml maintenance.yml --syntax-check
 ansible-playbook -i inventory/hosts.example.yml verify.yml --syntax-check
+ansible-playbook -i inventory/hosts.example.yml uninstall.yml --syntax-check
 ```
 
 Tests de publication avec de vrais builds MkDocs :
@@ -244,6 +243,24 @@ MKDOCS_BIN="$PWD/.venv/bin/mkdocs" .venv/bin/python -m unittest discover -s test
 ```
 
 Voir `VALIDATION.md` pour les vérifications réellement effectuées. Aucun déploiement sur votre VPS n'est annoncé tant que votre inventory n'a pas été exécuté.
+
+## Désinstaller complètement
+
+**Cette commande efface les dépôts Git, la base Forgejo, les documents, les versions HTML et toutes les sauvegardes locales de la plateforme. Exporter ce qui doit être conservé avant de la lancer.**
+
+Avec root :
+
+```sh
+ansible-playbook uninstall.yml -k
+```
+
+Avec un utilisateur sudo, ajouter `-K`. Si l'inventory charge Vault, ajouter `--ask-vault-pass`.
+
+Le playbook arrête les timers puis les services, retire les configurations Nginx de la plateforme, les certificats `knowledge-*`, les secrets, les programmes et l'environnement Python isolé, puis supprime les comptes et groupes de service. Le site Nginx initial est restauré s'il était actif avant l'installation. Les sauvegardes Restic distantes et le reverse proxy extérieur ne sont pas modifiés.
+
+Les nouvelles installations enregistrent les paquets ajoutés dans `/var/lib/knowledge-platform/install-state.json`. La désinstallation les purge sans autoremove général et refuse un plan qui supprimerait des paquets extérieurs. SSH, sudo, Python nécessaire à Ansible et les paquets préexistants restent disponibles. Si d’autres certificats sont présents, Certbot et ses dépendances sont conservés pour les protéger. Une installation antérieure à ce suivi ne permet pas de distinguer les paquets partagés : ses fichiers et données sont supprimés, ses paquets Debian sont conservés. Les mises à jour du système ne sont pas annulées.
+
+`deploy.yml` peut être relancé sans recréer les documents ; `uninstall.yml` peut être relancé après une désinstallation réussie sans changement. Pour retirer la Basic Auth d'une installation existante, relancer `deploy.yml` : le fichier d'authentification est supprimé et Nginx rechargé. Si le proxy extérieur impose sa propre Basic Auth, la retirer également dans sa configuration.
 
 ## Sources et licences
 

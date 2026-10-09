@@ -2,6 +2,8 @@
 
 Date : 9 octobre 2026.
 
+Les tableaux et la section « Configuration simplifiée » ci-dessous décrivent la version historique avec Basic Auth, avant son retrait. La validation de la version actuelle figure dans la section « Accès libre et désinstallation ».
+
 Les tests ont été réalisés localement dans des environnements Debian avec systemd. Docker a servi uniquement à isoler ces tests ; la plateforme déployée par Ansible utilise des services natifs. Aucun VPS utilisateur n'a été contacté.
 
 | Vérification | Résultat |
@@ -43,3 +45,24 @@ Le parcours avec adresse SSH, utilisateur root et un seul email a été testé �
 - `tests/config.yml` : valeurs automatiques, templates pour adresse IPv4 et domaines facultatifs vérifiés sans serveur.
 
 Le test de déploiement utilise une connexion Docker locale pour isoler Debian ; la configuration SSH par mot de passe est inchangée. Aucun VPS utilisateur n'a été contacté.
+
+## Accès libre et désinstallation
+
+La version actuelle a été testée sur Debian 13 arm64 avec systemd dans un environnement local jetable, sans contact avec le VPS utilisateur.
+
+| Vérification | Résultat |
+| --- | --- |
+| Déploiement sans Basic Auth | Documentation HTTP 200 sans en-tête Authorization ni challenge WWW-Authenticate |
+| Migration d'une configuration Basic Auth existante | HTTP 401 avant migration, HTTP 200 après ; ancien fichier de mots de passe supprimé |
+| Sauvegarde sans fichier htpasswd | Première archive créée et vérifiée |
+| Relance du déploiement | 61 tâches réussies, zéro changement, zéro erreur |
+| verify.yml sans mot de passe documentaire | Trois contrôles réussis |
+| Désinstallation puis réinstallation | Réussite |
+| Purge des paquets suivis sur une installation dédiée | Réussite ; paquets nginx, restic et git-lfs retirés |
+| Certificats knowledge-* et comptes de service | Suppression vérifiée |
+| Usage partagé de Certbot | Certificat extérieur et dépendances Certbot conservés ; apt-get check réussi |
+| Données extérieures et SSH | Conservation vérifiée |
+| Seconde désinstallation avec la version finale | 19 tâches réussies, zéro changement, zéro erreur |
+| Tests de configuration et syntaxe des quatre playbooks | Réussite |
+
+Les sauvegardes Restic extérieures, le reverse proxy Proxmox et le réseau du VPS ne sont pas modifiés par la désinstallation. La restauration d'un site Nginx préexistant dépend du suivi enregistré avant installation ; le parcours historique sans suivi conserve les paquets préexistants.
