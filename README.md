@@ -31,17 +31,9 @@ all:
 
 Renseigner `ansible_port` avec le port SSH fourni par l'hébergeur (22 par défaut). Le mot de passe SSH sera demandé au lancement ; l'inventory réel est ignoré par Git.
 
-### 2. Se connecter une première fois
+### 2. Déployer
 
-Adapter l'adresse, l'utilisateur et le port (`-p`) aux valeurs de l'inventory :
-
-```sh
-ssh -o PubkeyAuthentication=no -o PreferredAuthentications=password,keyboard-interactive -p 22 root@203.0.113.10
-```
-
-Vérifier l'empreinte du serveur auprès de l'hébergeur avant de l'accepter. Saisir le mot de passe SSH, puis `exit` pour revenir sur votre poste. Aucune clé d'authentification SSH n'est nécessaire.
-
-### 3. Déployer
+La vérification de l'empreinte SSH est désactivée dans le `ansible.cfg` de ce dépôt : aucune première connexion manuelle ni ajout à `known_hosts` n'est nécessaire. Les connexions utilisent le mot de passe SSH ; l'identité du serveur n'est pas vérifiée. Pour réactiver cette vérification, remettre `host_key_checking = True` et enregistrer auparavant l'empreinte vérifiée dans `known_hosts`.
 
 Avec `root` :
 
@@ -57,7 +49,7 @@ ansible-playbook deploy.yml -k -K
 
 Deux secrets sont demandés : le **mot de passe SSH**, puis un **mot de passe plateforme d'au moins 16 caractères** à choisir pour Forgejo et la consultation des docs. Avec sudo, `-K` demande également son mot de passe ; l'omettre si sudo ne demande pas de mot de passe. Aucun Vault nécessaire.
 
-### 4. Utiliser
+### 3. Utiliser
 
 Les adresses exactes sont affichées à la fin du déploiement :
 
