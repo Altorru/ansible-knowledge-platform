@@ -1,0 +1,13 @@
+---
+platform_upgrade_packages: true
+git_domain: git.example.invalid
+docs_domain: docs.example.invalid
+certificate_email: admin@example.invalid
+# letsencrypt en production ; selfsigned uniquement pour les tests/réseaux internes.
+tls_mode: letsencrypt
+forgejo_admin_user: docsadmin
+forgejo_admin_email: admin@example.invalid
+knowledge_repo: base-connaissance
+knowledge_branch: main
+# Optionnel : sauvegarde extérieure Restic (S3, REST, etc.), secrets dans Vault.
+backup_restic_repository: ''

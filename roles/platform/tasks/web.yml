@@ -1,0 +1,149 @@
+---
+- name: Vérifier le mot de passe de consultation existant
+  ansible.builtin.command:
+    argv: [htpasswd, -v, -i, /etc/nginx/knowledge.htpasswd, docs]
+    stdin: '{{ docs_password }}'
+  register: docs_auth_check
+  changed_when: false
+  failed_when: false
+  no_log: true
+
+- name: Configurer le mot de passe partagé de consultation
+  ansible.builtin.command:
+    argv: [htpasswd, -c, -B, -i, /etc/nginx/knowledge.htpasswd, docs]
+    stdin: '{{ docs_password }}'
+  when: docs_auth_check.rc != 0
+  changed_when: true
+  no_log: true
+
+- name: Protéger le fichier de mots de passe
+  ansible.builtin.file:
+    path: /etc/nginx/knowledge.htpasswd
+    owner: root
+    group: www-data
+    mode: '0640'
+
+- name: Sélectionner les chemins des certificats
+  ansible.builtin.set_fact:
+    tls_certificate: '{{ "/etc/letsencrypt/live/" ~ certificate_name ~ "/fullchain.pem" if tls_mode == "letsencrypt" else "/etc/knowledge/tls/" ~ certificate_name ~ ".crt" }}'
+    tls_key: '{{ "/etc/letsencrypt/live/" ~ certificate_name ~ "/privkey.pem" if tls_mode == "letsencrypt" else "/etc/knowledge/tls/" ~ certificate_name ~ ".key" }}'
+
+- name: Vérifier la présence du certificat
+  ansible.builtin.stat:
+    path: '{{ tls_certificate }}'
+  register: certificate
+
+- name: Préparer le challenge HTTP sans exposer de contenu
+  ansible.builtin.template:
+    src: nginx-http.conf.j2
+    dest: /etc/nginx/sites-available/knowledge.conf
+    mode: '0644'
+  when: not certificate.stat.exists
+  notify: Reload web server
+
+- name: Activer le site Nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/knowledge.conf
+    dest: /etc/nginx/sites-enabled/knowledge.conf
+    state: link
+  notify: Reload web server
+
+- name: Activer Nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Appliquer le site HTTP
+  ansible.builtin.meta: flush_handlers
+
+- name: Obtenir le certificat public
+  ansible.builtin.command:
+    argv:
+      - certbot
+      - certonly
+      - --webroot
+      - -w
+      - /var/www/knowledge-acme
+      - --non-interactive
+      - --agree-tos
+      - --email
+      - '{{ certificate_email }}'
+      - --cert-name
+      - '{{ certificate_name }}'
+      - -d
+      - '{{ git_domain }}'
+      - -d
+      - '{{ docs_domain }}'
+    creates: '{{ tls_certificate }}'
+  when: tls_mode == 'letsencrypt'
+
+- name: Créer le dossier TLS pour les tests
+  ansible.builtin.file:
+    path: /etc/knowledge/tls
+    state: directory
+    mode: '0700'
+  when: tls_mode == 'selfsigned'
+
+- name: Créer un certificat de test auto-signé
+  ansible.builtin.command:
+    argv: [openssl, req, -x509, -newkey, 'rsa:3072', -nodes, -days, '365', -keyout, '{{ tls_key }}', -out, '{{ tls_certificate }}', -subj, '/CN={{ docs_domain }}', -addext, 'subjectAltName=DNS:{{ git_domain }},DNS:{{ docs_domain }}']
+    creates: '{{ tls_certificate }}'
+  when: tls_mode == 'selfsigned'
+
+- name: Installer le site HTTPS
+  ansible.builtin.template:
+    src: nginx.conf.j2
+    dest: /etc/nginx/sites-available/knowledge.conf
+    mode: '0644'
+  notify: Reload web server
+
+- name: Créer le dossier des hooks de renouvellement TLS
+  ansible.builtin.file:
+    path: /etc/letsencrypt/renewal-hooks/deploy
+    state: directory
+    mode: '0755'
+  when: tls_mode == 'letsencrypt'
+
+- name: Installer le hook de renouvellement TLS
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/renewal-hooks/deploy/knowledge-nginx
+    content: "#!/bin/sh\nnginx -t && systemctl reload nginx\n"
+    mode: '0755'
+  when: tls_mode == 'letsencrypt'
+
+- name: Activer le renouvellement des certificats
+  ansible.builtin.systemd_service:
+    name: certbot.timer
+    enabled: true
+    state: started
+  when: tls_mode == 'letsencrypt'
+
+- name: Appliquer HTTPS
+  ansible.builtin.meta: flush_handlers
+
+- name: Vérifier que le site exige une authentification
+  ansible.builtin.uri:
+    url: https://127.0.0.1/
+    headers: {Host: '{{ docs_domain }}'}
+    validate_certs: false
+    status_code: 401
+
+- name: Vérifier la documentation publiée
+  ansible.builtin.uri:
+    url: https://127.0.0.1/
+    headers: {Host: '{{ docs_domain }}'}
+    url_username: docs
+    url_password: '{{ docs_password }}'
+    force_basic_auth: true
+    validate_certs: false
+    status_code: 200
+  no_log: true
+
+- name: Afficher les accès
+  ansible.builtin.debug:
+    msg:
+      - 'Forgejo : https://{{ git_domain }}/'
+      - 'Documentation : https://{{ docs_domain }}/ (utilisateur docs)'
+      - 'Clone : https://{{ git_domain }}/{{ forgejo_admin_user }}/{{ knowledge_repo }}.git'
+      - 'Sauvegarde locale quotidienne ; activer Restic pour une copie extérieure.'

@@ -1,0 +1,13 @@
+---
+platform_upgrade_packages: true
+forgejo_version: '15.0.9'
+forgejo_checksums:
+  x86_64: 04bf4981241cd7a39554809686d3e1811e219073cbf9a6ce6ed3895adfd8d17a
+  aarch64: be0aff7570c0b94722b4fee01429eabe9991082590556f127a916e6cc8c92464
+forgejo_architectures:
+  x86_64: amd64
+  aarch64: arm64
+publish_interval: 60s
+backup_retention_days: 7
+backup_restic_repository: ''
+tls_mode: letsencrypt

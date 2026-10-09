@@ -1,0 +1,29 @@
+---
+- name: Préparer Debian et les comptes système
+  ansible.builtin.import_tasks: system.yml
+
+- name: Installer et configurer Forgejo
+  ansible.builtin.import_tasks: forgejo.yml
+
+- name: Configurer la documentation et les sauvegardes
+  ansible.builtin.import_tasks: documentation.yml
+
+- name: Configurer HTTPS et vérifier les accès
+  ansible.builtin.import_tasks: web.yml
+
+- name: Vérifier si la sauvegarde initiale a été réalisée
+  ansible.builtin.stat:
+    path: /var/backups/knowledge/.initial-backup-done
+  register: initial_backup
+
+- name: Réaliser la première sauvegarde cohérente
+  ansible.builtin.command: /usr/local/sbin/knowledge-backup
+  when: not initial_backup.stat.exists
+  changed_when: true
+
+- name: Mémoriser la réussite de la sauvegarde initiale
+  ansible.builtin.copy:
+    dest: /var/backups/knowledge/.initial-backup-done
+    content: "Initial backup completed.\n"
+    mode: '0600'
+  when: not initial_backup.stat.exists

@@ -1,0 +1,9 @@
+---
+all:
+  children:
+    knowledge:
+      hosts:
+        knowledge_01:
+          ansible_host: vps.example.invalid
+          ansible_user: deploy
+          ansible_port: 22

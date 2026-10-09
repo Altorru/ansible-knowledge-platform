@@ -1,0 +1,9 @@
+inventory/hosts.yml
+inventory/group_vars/knowledge/vault.yml
+.vault-password*
+.venv/
+__pycache__/
+*.pyc
+site/
+*.retry
+.DS_Store

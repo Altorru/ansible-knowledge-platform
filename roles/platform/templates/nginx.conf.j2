@@ -1,0 +1,38 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ git_domain }} {{ docs_domain }};
+    location /.well-known/acme-challenge/ { root /var/www/knowledge-acme; }
+    location / { return 301 https://$host$request_uri; }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ git_domain }};
+    ssl_certificate {{ tls_certificate }};
+    ssl_certificate_key {{ tls_key }};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 64m;
+    add_header X-Content-Type-Options nosniff always;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+    }
+}
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name {{ docs_domain }};
+    ssl_certificate {{ tls_certificate }};
+    ssl_certificate_key {{ tls_key }};
+    ssl_protocols TLSv1.2 TLSv1.3;
+    root /srv/knowledge/current;
+    index index.html;
+    auth_basic "Documentation entreprise";
+    auth_basic_user_file /etc/nginx/knowledge.htpasswd;
+    add_header X-Content-Type-Options nosniff always;
+    location / { try_files $uri $uri/ =404; }
+}

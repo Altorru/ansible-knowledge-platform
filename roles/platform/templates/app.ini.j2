@@ -1,0 +1,41 @@
+APP_NAME = Base de connaissance
+RUN_USER = forgejo
+RUN_MODE = prod
+WORK_PATH = /var/lib/forgejo
+
+[database]
+DB_TYPE = sqlite3
+PATH = /var/lib/forgejo/data/forgejo.db
+
+[repository]
+ROOT = /var/lib/forgejo/repositories
+DEFAULT_BRANCH = main
+
+[server]
+DOMAIN = {{ git_domain }}
+ROOT_URL = https://{{ git_domain }}/
+HTTP_ADDR = 127.0.0.1
+HTTP_PORT = 3000
+DISABLE_SSH = true
+OFFLINE_MODE = true
+LFS_START_SERVER = false
+
+[security]
+INSTALL_LOCK = true
+SECRET_KEY = {{ forgejo_secret_key }}
+INTERNAL_TOKEN = {{ forgejo_internal_token }}
+
+[oauth2]
+JWT_SIGNING_ALGORITHM = HS256
+JWT_SECRET = {{ oauth_jwt.content | b64decode | trim }}
+
+[service]
+DISABLE_REGISTRATION = true
+REQUIRE_SIGNIN_VIEW = true
+
+[actions]
+ENABLED = false
+
+[log]
+MODE = console
+LEVEL = Info

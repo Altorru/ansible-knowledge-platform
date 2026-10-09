@@ -1,0 +1,27 @@
+---
+- name: Mettre à jour Debian sans migration ni redémarrage automatique
+  hosts: knowledge
+  become: true
+  gather_facts: true
+  tasks:
+    - name: Vérifier Debian
+      ansible.builtin.assert:
+        that: ansible_facts.distribution == 'Debian'
+    - name: Sauvegarder avant la maintenance
+      ansible.builtin.command: /usr/local/sbin/knowledge-backup
+      when: not ansible_check_mode
+      changed_when: true
+    - name: Mettre à jour les paquets
+      ansible.builtin.apt:
+        update_cache: true
+        upgrade: safe
+        force_apt_get: true
+        fail_on_autoremove: true
+        lock_timeout: 120
+    - name: Vérifier si un redémarrage est requis
+      ansible.builtin.stat:
+        path: /var/run/reboot-required
+      register: reboot
+    - name: Afficher le besoin de redémarrage
+      ansible.builtin.debug:
+        msg: "Redémarrage requis : {{ reboot.stat.exists }}. À programmer séparément."

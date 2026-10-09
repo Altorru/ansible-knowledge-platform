@@ -1,0 +1,94 @@
+---
+- name: Installer les scripts de publication et de provisionnement
+  ansible.builtin.copy:
+    src: '{{ item }}'
+    dest: '/usr/local/lib/knowledge/{{ item }}'
+    mode: '0755'
+  loop: [publish.py, bootstrap_repo.py, git_credentials.py]
+
+- name: Installer les dépendances fixées du build
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/requirements.txt'
+    dest: /opt/knowledge/requirements.txt
+    mode: '0644'
+  register: build_requirements
+
+- name: Installer MkDocs dans un environnement Python isolé
+  ansible.builtin.pip:
+    requirements: /opt/knowledge/requirements.txt
+    virtualenv: /opt/knowledge/venv
+    virtualenv_command: python3 -m venv
+
+- name: Installer la configuration du build administrée par Ansible
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/seed/mkdocs.yml'
+    dest: /opt/knowledge/mkdocs.yml
+    mode: '0644'
+
+- name: Installer le modèle initial du dépôt
+  ansible.builtin.copy:
+    src: '{{ playbook_dir }}/seed/'
+    dest: /opt/knowledge/seed/
+    mode: '0644'
+    directory_mode: '0755'
+
+- name: Créer le compte et initialiser uniquement un dépôt vide
+  ansible.builtin.command: python3 /usr/local/lib/knowledge/bootstrap_repo.py
+  become_user: forgejo
+  environment:
+    HOME: /var/lib/forgejo
+    USER: forgejo
+    FORGEJO_ADMIN_USER: '{{ forgejo_admin_user }}'
+    FORGEJO_ADMIN_EMAIL: '{{ forgejo_admin_email }}'
+    FORGEJO_ADMIN_PASSWORD: '{{ forgejo_admin_password }}'
+    KNOWLEDGE_REPO: '{{ knowledge_repo }}'
+    KNOWLEDGE_SEED: /opt/knowledge/seed
+    GIT_TERMINAL_PROMPT: '0'
+  register: repo_bootstrap
+  changed_when: "repo_bootstrap.stdout | trim == 'CHANGED'"
+  no_log: true
+
+- name: Configurer la publication
+  ansible.builtin.copy:
+    dest: /etc/knowledge/publish.json
+    group: knowledge
+    mode: '0640'
+    content: >-
+      {{ {'root': '/srv/knowledge', 'repository': '/var/lib/forgejo/repositories/' ~ forgejo_admin_user ~ '/' ~ knowledge_repo ~ '.git', 'branch': knowledge_branch, 'mkdocs': '/opt/knowledge/venv/bin/mkdocs', 'mkdocs_config': '/opt/knowledge/mkdocs.yml', 'requirements': '/opt/knowledge/requirements.txt'} | to_nice_json }}
+
+- name: Installer la sauvegarde
+  ansible.builtin.copy:
+    src: backup.sh
+    dest: /usr/local/sbin/knowledge-backup
+    mode: '0700'
+
+- name: Configurer la sauvegarde extérieure optionnelle
+  ansible.builtin.template:
+    src: backup.env.j2
+    dest: /etc/knowledge/backup.env
+    mode: '0600'
+  no_log: true
+
+- name: Installer les services et timers documentaires
+  ansible.builtin.template:
+    src: '{{ item }}.j2'
+    dest: '/etc/systemd/system/knowledge-{{ item }}'
+    mode: '0644'
+  loop: [publish.service, publish.timer, backup.service, backup.timer]
+
+- name: Recharger systemd
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: Construire la première version et appliquer les changements de configuration
+  ansible.builtin.command: /opt/knowledge/venv/bin/python /usr/local/lib/knowledge/publish.py /etc/knowledge/publish.json
+  become_user: knowledge
+  register: first_build
+  changed_when: "'PUBLISHED:' in first_build.stdout"
+
+- name: Activer les timers
+  ansible.builtin.systemd_service:
+    name: 'knowledge-{{ item }}.timer'
+    enabled: true
+    state: started
+  loop: [publish, backup]

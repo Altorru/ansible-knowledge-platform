@@ -1,0 +1,98 @@
+---
+- name: Générer les secrets internes une seule fois
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import json, os, secrets; fd=os.open('/etc/forgejo/secrets.json', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600); os.write(fd, json.dumps({'key':secrets.token_hex(32), 'token':secrets.token_urlsafe(64)}).encode()); os.close(fd)"
+    creates: /etc/forgejo/secrets.json
+  no_log: true
+
+- name: Lire les secrets internes persistants
+  ansible.builtin.slurp:
+    src: /etc/forgejo/secrets.json
+  register: internal_secrets
+  no_log: true
+
+- name: Préparer la configuration interne
+  ansible.builtin.set_fact:
+    forgejo_secret_key: '{{ (internal_secrets.content | b64decode | from_json).key }}'
+    forgejo_internal_token: '{{ (internal_secrets.content | b64decode | from_json).token }}'
+    certificate_name: 'knowledge-{{ (git_domain ~ ":" ~ docs_domain) | hash("sha256") | truncate(12, true, "") }}'
+  no_log: true
+
+- name: Installer Forgejo avec contrôle SHA256 fixé dans le dépôt
+  ansible.builtin.get_url:
+    url: 'https://codeberg.org/forgejo/forgejo/releases/download/v{{ forgejo_version }}/forgejo-{{ forgejo_version }}-linux-{{ forgejo_architectures[ansible_facts.architecture] }}'
+    dest: '/usr/local/lib/forgejo/forgejo-{{ forgejo_version }}'
+    checksum: 'sha256:{{ forgejo_checksums[ansible_facts.architecture] }}'
+    mode: '0755'
+  register: forgejo_download
+
+- name: Vérifier si Forgejo contient déjà des données
+  ansible.builtin.stat:
+    path: /var/lib/forgejo/data/forgejo.db
+  register: existing_database
+
+- name: Sauvegarder avant une mise à jour du binaire
+  ansible.builtin.command: /usr/local/sbin/knowledge-backup
+  when: forgejo_download.changed and existing_database.stat.exists
+  changed_when: true
+
+- name: Sélectionner le binaire Forgejo
+  ansible.builtin.file:
+    src: '/usr/local/lib/forgejo/forgejo-{{ forgejo_version }}'
+    dest: /usr/local/bin/forgejo
+    state: link
+  notify: Restart Forgejo
+
+- name: Générer le secret JWT sans modifier la configuration Forgejo
+  ansible.builtin.command:
+    argv:
+      - python3
+      - -c
+      - "import os, subprocess; secret=subprocess.check_output(['/usr/local/bin/forgejo','generate','secret','JWT_SECRET']); fd=os.open('/etc/forgejo/oauth-jwt', os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o600); os.write(fd, secret); os.close(fd)"
+    creates: /etc/forgejo/oauth-jwt
+  no_log: true
+
+- name: Lire le secret JWT
+  ansible.builtin.slurp:
+    src: /etc/forgejo/oauth-jwt
+  register: oauth_jwt
+  no_log: true
+
+- name: Configurer Forgejo
+  ansible.builtin.template:
+    src: app.ini.j2
+    dest: /etc/forgejo/app.ini
+    owner: root
+    group: forgejo
+    mode: '0640'
+  no_log: true
+  notify: Restart Forgejo
+
+- name: Installer le service Forgejo
+  ansible.builtin.template:
+    src: forgejo.service.j2
+    dest: /etc/systemd/system/forgejo.service
+    mode: '0644'
+  notify: Restart Forgejo
+
+- name: Appliquer la configuration Forgejo
+  ansible.builtin.meta: flush_handlers
+
+- name: Activer Forgejo
+  ansible.builtin.systemd_service:
+    name: forgejo
+    daemon_reload: true
+    enabled: true
+    state: started
+
+- name: Attendre Forgejo
+  ansible.builtin.uri:
+    url: http://127.0.0.1:3000/user/login
+    status_code: 200
+  register: forgejo_health
+  retries: 20
+  delay: 2
+  until: forgejo_health.status == 200

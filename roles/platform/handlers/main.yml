@@ -1,0 +1,17 @@
+---
+- name: Restart Forgejo
+  ansible.builtin.systemd_service:
+    name: forgejo
+    daemon_reload: true
+    state: restarted
+
+- name: Validate Nginx
+  listen: Reload web server
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Reload Nginx
+  listen: Reload web server
+  ansible.builtin.systemd_service:
+    name: nginx
+    state: reloaded

@@ -1,0 +1,10 @@
+[Unit]
+Description=Sauvegarder la plateforme documentaire
+After=forgejo.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/knowledge/backup.env
+ExecStart=/usr/local/sbin/knowledge-backup
+TimeoutStartSec=1800
+UMask=0077

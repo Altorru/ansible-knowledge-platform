@@ -1,0 +1,10 @@
+[Unit]
+Description=Détecter les changements du dépôt documentaire
+
+[Timer]
+OnBootSec=90s
+OnUnitInactiveSec={{ publish_interval }}
+Unit=knowledge-publish.service
+
+[Install]
+WantedBy=timers.target

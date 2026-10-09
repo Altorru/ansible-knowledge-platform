@@ -1,0 +1,53 @@
+---
+- name: Installer les paquets nécessaires
+  ansible.builtin.apt:
+    name: [git, git-lfs, nginx, python3-venv, python3-apt, python3-packaging, python3-setuptools, acl, openssl, apache2-utils, certbot, restic, ca-certificates]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+    lock_timeout: 120
+
+- name: Mettre à jour Debian sans suppression ni migration majeure
+  ansible.builtin.apt:
+    upgrade: safe
+    force_apt_get: true
+    fail_on_autoremove: true
+    lock_timeout: 120
+  when: platform_upgrade_packages | bool
+
+- name: Créer les comptes système
+  ansible.builtin.user:
+    name: '{{ item.name }}'
+    system: true
+    create_home: true
+    home: '{{ item.home }}'
+    shell: /usr/sbin/nologin
+  loop:
+    - {name: forgejo, home: /var/lib/forgejo}
+    - {name: knowledge, home: /srv/knowledge}
+
+- name: Autoriser la lecture du dépôt par le constructeur
+  ansible.builtin.user:
+    name: knowledge
+    groups: forgejo
+    append: true
+
+- name: Créer les répertoires
+  ansible.builtin.file:
+    path: '{{ item.path }}'
+    state: directory
+    owner: '{{ item.owner | default("root") }}'
+    group: '{{ item.group | default("root") }}'
+    mode: '{{ item.mode | default("0755") }}'
+  loop:
+    - {path: /var/lib/forgejo, owner: forgejo, group: forgejo, mode: '0750'}
+    - {path: /var/lib/forgejo/data, owner: forgejo, group: forgejo, mode: '0750'}
+    - {path: /var/lib/forgejo/repositories, owner: forgejo, group: forgejo, mode: '0750'}
+    - {path: /etc/forgejo, group: forgejo, mode: '0750'}
+    - {path: /usr/local/lib/forgejo}
+    - {path: /usr/local/lib/knowledge}
+    - {path: /opt/knowledge}
+    - {path: /etc/knowledge, group: knowledge, mode: '0750'}
+    - {path: /srv/knowledge, owner: knowledge, group: knowledge, mode: '0755'}
+    - {path: /var/www/knowledge-acme}
+    - {path: /var/backups/knowledge, mode: '0700'}

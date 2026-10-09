@@ -1,0 +1,7 @@
+server {
+    listen 80;
+    listen [::]:80;
+    server_name {{ git_domain }} {{ docs_domain }};
+    location /.well-known/acme-challenge/ { root /var/www/knowledge-acme; }
+    location / { return 403; }
+}

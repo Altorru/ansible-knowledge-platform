@@ -1,0 +1,11 @@
+[Unit]
+Description=Sauvegarde quotidienne de la plateforme
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Europe/Paris
+RandomizedDelaySec=15m
+Persistent=true
+Unit=knowledge-backup.service
+
+[Install]
+WantedBy=timers.target

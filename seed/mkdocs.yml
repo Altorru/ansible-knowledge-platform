@@ -1,0 +1,17 @@
+site_name: Base de connaissance
+site_description: Documentation de l'entreprise et des projets
+strict: true
+theme:
+  name: material
+  language: fr
+  font: false
+plugins:
+  - search
+nav:
+  - Accueil: index.md
+  - Entreprise: entreprise.md
+  - Développement: developpement.md
+  - Projets: projets.md
+  - Exploitation: exploitation.md
+  - Décisions: decisions.md
+  - Contexte IA: ia.md
