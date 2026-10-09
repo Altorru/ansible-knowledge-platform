@@ -1,0 +1,56 @@
+---
+- name: Vérifier la version et l'architecture Debian
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution == 'Debian'
+      - ansible_facts.distribution_major_version | int >= 12
+      - ansible_facts.architecture in ['x86_64', 'aarch64']
+    fail_msg: 'Le VPS doit utiliser Debian 12+ sur amd64 ou arm64.'
+
+- name: Vérifier l'email de la plateforme
+  ansible.builtin.assert:
+    that:
+      - platform_email | default('') is match('^[^@\s]+@[^@\s]+\.[^@\s]+$')
+    fail_msg: 'Ajouter un platform_email valide dans inventory/hosts.yml.'
+
+- name: Vérifier les adresses d'accès
+  ansible.builtin.assert:
+    that:
+      - git_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
+      - docs_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
+      - "'.invalid' not in git_domain and '.invalid' not in docs_domain"
+    fail_msg: 'ansible_host doit être une adresse IPv4 ou un nom DNS valide, sans .invalid.'
+
+- name: Vérifier les paramètres internes
+  ansible.builtin.assert:
+    that:
+      - tls_mode in ['letsencrypt', 'selfsigned']
+      - git_domain != docs_domain or git_https_port | int != docs_https_port | int
+      - tls_mode != 'letsencrypt' or git_domain != docs_domain
+      - forgejo_admin_user is match('^[a-z][a-z0-9_-]+$')
+      - knowledge_repo is match('^[a-z][a-z0-9_-]+$')
+      - knowledge_branch == 'main'
+      - "tls_mode != 'letsencrypt' or '.invalid' not in certificate_email"
+    fail_msg: 'Paramètres avancés incompatibles : conserver les valeurs par défaut ou vérifier les domaines, ports, compte et dépôt.'
+
+- name: Vérifier les secrets sans les afficher
+  ansible.builtin.set_fact:
+    platform_password_valid: '{{ forgejo_admin_password | length >= 16 }}'
+    docs_password_valid: '{{ docs_password | length >= 16 }}'
+    restic_password_valid: '{{ not backup_restic_repository or vault_restic_password | default("") | length >= 16 }}'
+  no_log: true
+
+- name: Vérifier le mot de passe plateforme
+  ansible.builtin.assert:
+    that: platform_password_valid
+    fail_msg: 'Le mot de passe plateforme doit contenir au moins 16 caractères. Relancer et saisir un mot de passe plus long.'
+
+- name: Vérifier le mot de passe documentaire
+  ansible.builtin.assert:
+    that: docs_password_valid
+    fail_msg: 'Le mot de passe documentaire doit contenir au moins 16 caractères. Vérifier vault_docs_password si défini.'
+
+- name: Vérifier le secret de sauvegarde extérieure
+  ansible.builtin.assert:
+    that: restic_password_valid
+    fail_msg: 'Restic est activé : définir vault_restic_password avec au moins 16 caractères.'

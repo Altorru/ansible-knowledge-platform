@@ -32,26 +32,6 @@
         docs_password: "{{ vault_docs_password | default(prompted_docs_password | default(vault_forgejo_admin_password | default(prompted_admin_password | default((admin_password_prompt | default({})).get('user_input', ''))))) }}"
       no_log: true
     - name: Valider la configuration avant toute installation
-      ansible.builtin.assert:
-        that:
-          - ansible_facts.distribution == 'Debian'
-          - ansible_facts.distribution_major_version | int >= 12
-          - ansible_facts.architecture in ['x86_64', 'aarch64']
-          - git_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
-          - docs_domain is match('^[a-z0-9][a-z0-9.-]+[a-z0-9]$')
-          - "'.invalid' not in git_domain and '.invalid' not in docs_domain"
-          - platform_email | default('') is match('^[^@\s]+@[^@\s]+\.[^@\s]+$')
-          - tls_mode in ['letsencrypt', 'selfsigned']
-          - git_domain != docs_domain or git_https_port | int != docs_https_port | int
-          - tls_mode != 'letsencrypt' or git_domain != docs_domain
-          - forgejo_admin_user is match('^[a-z][a-z0-9_-]+$')
-          - knowledge_repo is match('^[a-z][a-z0-9_-]+$')
-          - knowledge_branch == 'main'
-          - forgejo_admin_password | length >= 16
-          - docs_password | length >= 16
-          - "tls_mode != 'letsencrypt' or '.invalid' not in certificate_email"
-          - "not backup_restic_repository or vault_restic_password | default('') | length >= 16"
-        fail_msg: 'Renseigner la cible SSH, platform_email et un mot de passe plateforme de 16 caractères minimum. Debian 12+ requis.'
-      no_log: true
+      ansible.builtin.import_tasks: roles/platform/tasks/validate.yml
   roles:
     - platform

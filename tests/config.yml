@@ -46,3 +46,25 @@
         that:
           - git_url == 'https://git.example.com'
           - docs_url == 'https://docs.example.com'
+
+    - name: Vérifier la validation avec une configuration minimale correcte
+      vars:
+        ansible_facts: {distribution: Debian, distribution_major_version: '13', architecture: aarch64}
+        forgejo_admin_password: exemple-test-16-caracteres
+        docs_password: exemple-test-16-caracteres
+      ansible.builtin.include_tasks: ../roles/platform/tasks/validate.yml
+
+    - name: Vérifier le diagnostic d'un mot de passe trop court
+      vars:
+        ansible_facts: {distribution: Debian, distribution_major_version: '13', architecture: aarch64}
+        forgejo_admin_password: court
+        docs_password: court
+      block:
+        - ansible.builtin.include_tasks: ../roles/platform/tasks/validate.yml
+        - ansible.builtin.fail:
+            msg: 'La validation aurait dû refuser le mot de passe court.'
+      rescue:
+        - ansible.builtin.assert:
+            that:
+              - ansible_failed_result.msg is search('mot de passe plateforme doit contenir au moins 16 caractères')
+              - "'court' not in ansible_failed_result.msg"

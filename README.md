@@ -49,6 +49,8 @@ ansible-playbook deploy.yml -k -K
 
 Deux secrets sont demandés : le **mot de passe SSH**, puis un **mot de passe plateforme d'au moins 16 caractères** à choisir pour Forgejo et la consultation des docs. Avec sudo, `-K` demande également son mot de passe ; l'omettre si sudo ne demande pas de mot de passe. Aucun Vault nécessaire.
 
+Si la validation refuse la configuration, le message précise désormais la condition à corriger : Debian, adresse SSH, email ou mot de passe. Le mot de passe plateforme doit comporter au moins 16 caractères ; aucun secret n'est affiché dans les diagnostics.
+
 ### 3. Utiliser
 
 Les adresses exactes sont affichées à la fin du déploiement :
