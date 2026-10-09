@@ -150,6 +150,27 @@ Pour utiliser des domaines et un certificat public plus tard, ajouter dans l'inv
 
 Le playbook n'altère ni le pare-feu ni la configuration SSH. Forgejo écoute en interne sur `127.0.0.1:3000`, derrière Nginx. La consultation reste protégée par mot de passe. Pour éviter les mises à jour système au déploiement, ajouter `platform_upgrade_packages: false` dans l'inventory.
 
+## Reverse proxy Nginx existant
+
+Le Nginx installé par Ansible sert la documentation et transmet les requêtes Git à Forgejo, qui écoute uniquement sur `127.0.0.1:3000`. Avec un reverse proxy extérieur, le trajet Git est donc : proxy extérieur → HTTPS sur le port 8443 du VPS → Nginx de la plateforme → Forgejo en HTTP local.
+
+Dans le proxy extérieur, utiliser **HTTPS** vers le port 8443 :
+
+```nginx
+location / {
+    proxy_pass https://ADRESSE_DU_VPS:8443;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+}
+```
+
+`proxy_pass http://ADRESSE_DU_VPS:8443` provoque `The plain HTTP request was sent to HTTPS port`. Dans Nginx Proxy Manager, choisir le scheme `https` et le port `8443`. Si la vérification du certificat upstream est activée, approuver le certificat auto-signé de la plateforme sur le proxy.
+
+Pour que les liens et URLs de clone Forgejo utilisent le domaine public du proxy, ajouter uniquement `git_url: https://git.votre-domaine.fr` dans l'inventory et relancer le déploiement. Le port interne reste 8443 avec les valeurs par défaut.
+
+Si le reverse proxy est sur le même VPS, ses ports peuvent entrer en conflit avec ceux du Nginx de la plateforme. Regrouper les configurations dans un seul Nginx nécessite d'adapter ce déploiement à la configuration existante. Ne pas exposer le port interne 3000 sur Internet pour contourner le proxy.
+
 ## Sauvegardes
 
 Chaque jour vers 03:30, heure de Paris (avec un décalage aléatoire jusqu'à 15 minutes), le serveur :
